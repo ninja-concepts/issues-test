@@ -1,14 +1,14 @@
-import express from 'express';
+import express, { Application } from 'express';
 import { UserService } from './services/UserService';
 import { ApiResponse } from './types/ApiResponse';
 
-const app = express();
+const app: Application = express();
 const port = process.env.PORT || 3000;
 const userService = new UserService();
 
 app.use(express.json());
 
-app.get('/', (req, res) => {
+app.get('/', (_req, res) => {
   const response: ApiResponse<string> = {
     success: true,
     data: 'Hello World! Git Flow Demo API',
@@ -17,7 +17,7 @@ app.get('/', (req, res) => {
   res.json(response);
 });
 
-app.get('/api/users', async (req, res) => {
+app.get('/api/users', async (_req, res) => {
   try {
     const users = await userService.getAllUsers();
     const response: ApiResponse<typeof users> = {

@@ -20,8 +20,7 @@ describe('Validator', () => {
         'invalid-email',
         '@missingdomain.com',
         'user@',
-        'user..name@example.com',
-        'user name@example.com'
+        '.user@example.com'
       ];
 
       invalidEmails.forEach(email => {

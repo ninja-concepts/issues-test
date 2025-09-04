@@ -1,5 +1,4 @@
 import { UserService } from '../src/services/UserService';
-import { User } from '../src/types/ApiResponse';
 
 describe('UserService', () => {
   let userService: UserService;

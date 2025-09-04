@@ -1,0 +1,71 @@
+name: "Feature Request"
+description: "New feature development"
+title: "[FEATURE] "
+labels: ["feature", "needs-estimation"]
+body:
+  - type: input
+    id: figma-link
+    attributes:
+      label: "Figma Link"
+      placeholder: "https://www.figma.com/file/..."
+    validations:
+      required: false
+  
+  - type: checkboxes
+    id: design-approval
+    attributes:
+      label: "Design Status"
+      options:
+        - label: "Approved by Design Team"
+  
+  - type: textarea
+    id: description
+    attributes:
+      label: "Feature Description"
+      description: "What this feature does and why it's needed"
+    validations:
+      required: true
+  
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: "Acceptance Criteria"
+      placeholder: |
+        - [ ] Criterion 1
+        - [ ] Criterion 2
+        - [ ] Criterion 3
+    validations:
+      required: true
+  
+  - type: textarea
+    id: testing-criteria
+    attributes:
+      label: "Testing Criteria"
+      placeholder: |
+        - [ ] Unit tests for core functionality
+        - [ ] Integration tests for API endpoints
+        - [ ] UI tests for user interactions
+        - [ ] [Specific test scenarios for testing team]
+    validations:
+      required: true
+  
+  - type: input
+    id: blocked-by
+    attributes:
+      label: "Blocked by"
+      placeholder: "#issue-number or None"
+      description: "List any issues this depends on"
+  
+  - type: dropdown
+    id: story-points
+    attributes:
+      label: "Story Points"
+      options:
+        - "1"
+        - "2" 
+        - "3"
+        - "5"
+        - "8"
+        - "13"
+    validations:
+      required: true

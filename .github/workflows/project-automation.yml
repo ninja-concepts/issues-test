@@ -1,0 +1,225 @@
+name: "Project Automation"
+on:
+  issues:
+    types: [opened, closed, labeled, unlabeled, assigned, unassigned]
+  pull_request:
+    types: [opened, closed, ready_for_review]
+
+jobs:
+  project_automation:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+      projects: write
+    steps:
+      - name: Generate App Token
+        id: app_token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.PROJECT_APP_ID }}
+          private-key: ${{ secrets.PROJECT_APP_KEY }}
+
+      - name: Auto-assign new issues to project
+        if: github.event_name == 'issues' && github.event.action == 'opened'
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+        run: |
+          echo "Adding issue #${{ github.event.issue.number }} to project"
+          
+          # Add to project board using GraphQL API
+          gh api graphql -f query='
+            mutation($project: ID!, $issue: ID!) {
+              addProjectV2ItemById(input: {projectId: $project, contentId: $issue}) {
+                item { 
+                  id 
+                  fieldValues(first: 20) {
+                    nodes {
+                      ... on ProjectV2ItemFieldSingleSelectValue {
+                        name
+                        field {
+                          ... on ProjectV2SingleSelectField {
+                            name
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }' -f project="${{ vars.PROJECT_ID }}" -f issue="${{ github.event.issue.node_id }}"
+
+      - name: Set initial status for new issues
+        if: github.event_name == 'issues' && github.event.action == 'opened'
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+        run: |
+          echo "Setting initial status to Backlog"
+          
+          # Get the project item ID first
+          ITEM_ID=$(gh api graphql -f query='
+            query($project: ID!) {
+              node(id: $project) {
+                ... on ProjectV2 {
+                  items(first: 100) {
+                    nodes {
+                      id
+                      content {
+                        ... on Issue {
+                          number
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }' -f project="${{ vars.PROJECT_ID }}" \
+            --jq ".data.node.items.nodes[] | select(.content.number == ${{ github.event.issue.number }}) | .id")
+          
+          # Set status to "Backlog"
+          if [ ! -z "$ITEM_ID" ]; then
+            gh api graphql -f query='
+              mutation($project: ID!, $item: ID!, $field: ID!, $value: String!) {
+                updateProjectV2ItemFieldValue(input: {
+                  projectId: $project, 
+                  itemId: $item, 
+                  fieldId: $field, 
+                  value: {singleSelectOptionId: $value}
+                }) { 
+                  projectV2Item { id } 
+                }
+              }' -f project="${{ vars.PROJECT_ID }}" \
+                 -f item="$ITEM_ID" \
+                 -f field="${{ vars.STATUS_FIELD_ID }}" \
+                 -f value="${{ vars.BACKLOG_OPTION_ID }}"
+          fi
+
+      - name: Move to Dev Complete on PR merge
+        if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+        run: |
+          echo "PR #${{ github.event.pull_request.number }} merged, updating related issues"
+          
+          # Extract issue number from PR body or title
+          ISSUE_NUMBER=""
+          
+          # Check PR body for "Closes #123" patterns
+          if [[ "${{ github.event.pull_request.body }}" =~ [Cc]loses[[:space:]]+#([0-9]+) ]]; then
+            ISSUE_NUMBER="${BASH_REMATCH[1]}"
+          elif [[ "${{ github.event.pull_request.body }}" =~ [Ff]ixes[[:space:]]+#([0-9]+) ]]; then
+            ISSUE_NUMBER="${BASH_REMATCH[1]}"
+          elif [[ "${{ github.event.pull_request.body }}" =~ [Rr]esolves[[:space:]]+#([0-9]+) ]]; then
+            ISSUE_NUMBER="${BASH_REMATCH[1]}"
+          fi
+          
+          if [ ! -z "$ISSUE_NUMBER" ]; then
+            echo "Found linked issue #$ISSUE_NUMBER"
+            
+            # Get the project item ID for the issue
+            ITEM_ID=$(gh api graphql -f query='
+              query($project: ID!) {
+                node(id: $project) {
+                  ... on ProjectV2 {
+                    items(first: 100) {
+                      nodes {
+                        id
+                        content {
+                          ... on Issue {
+                            number
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }' -f project="${{ vars.PROJECT_ID }}" \
+              --jq ".data.node.items.nodes[] | select(.content.number == $ISSUE_NUMBER) | .id")
+            
+            if [ ! -z "$ITEM_ID" ]; then
+              # Update issue status to "Dev Complete"
+              gh api graphql -f query='
+                mutation($project: ID!, $item: ID!, $field: ID!, $value: String!) {
+                  updateProjectV2ItemFieldValue(input: {
+                    projectId: $project, 
+                    itemId: $item, 
+                    fieldId: $field, 
+                    value: {singleSelectOptionId: $value}
+                  }) { 
+                    projectV2Item { id } 
+                  }
+                }' -f project="${{ vars.PROJECT_ID }}" \
+                   -f item="$ITEM_ID" \
+                   -f field="${{ vars.STATUS_FIELD_ID }}" \
+                   -f value="${{ vars.DEV_COMPLETE_OPTION_ID }}"
+              
+              # Assign to QA if QA_ASSIGNEE is set
+              if [ ! -z "${{ vars.QA_ASSIGNEE }}" ]; then
+                gh issue edit $ISSUE_NUMBER --add-assignee "${{ vars.QA_ASSIGNEE }}"
+                echo "Assigned issue #$ISSUE_NUMBER to QA: ${{ vars.QA_ASSIGNEE }}"
+              fi
+            fi
+          else
+            echo "No linked issue found in PR body"
+          fi
+
+      - name: Update priority based on labels
+        if: github.event_name == 'issues' && (github.event.action == 'labeled' || github.event.action == 'unlabeled')
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+        run: |
+          echo "Checking for priority label changes"
+          
+          # Get current labels
+          LABELS=$(gh api repos/${{ github.repository }}/issues/${{ github.event.issue.number }} --jq '.labels[].name')
+          
+          PRIORITY=""
+          if echo "$LABELS" | grep -q "priority:critical"; then
+            PRIORITY="${{ vars.CRITICAL_PRIORITY_ID }}"
+          elif echo "$LABELS" | grep -q "priority:high"; then
+            PRIORITY="${{ vars.HIGH_PRIORITY_ID }}"
+          elif echo "$LABELS" | grep -q "priority:medium"; then
+            PRIORITY="${{ vars.MEDIUM_PRIORITY_ID }}"
+          elif echo "$LABELS" | grep -q "priority:low"; then
+            PRIORITY="${{ vars.LOW_PRIORITY_ID }}"
+          fi
+          
+          if [ ! -z "$PRIORITY" ]; then
+            # Get the project item ID
+            ITEM_ID=$(gh api graphql -f query='
+              query($project: ID!) {
+                node(id: $project) {
+                  ... on ProjectV2 {
+                    items(first: 100) {
+                      nodes {
+                        id
+                        content {
+                          ... on Issue {
+                            number
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }' -f project="${{ vars.PROJECT_ID }}" \
+              --jq ".data.node.items.nodes[] | select(.content.number == ${{ github.event.issue.number }}) | .id")
+            
+            if [ ! -z "$ITEM_ID" ]; then
+              # Update priority field
+              gh api graphql -f query='
+                mutation($project: ID!, $item: ID!, $field: ID!, $value: String!) {
+                  updateProjectV2ItemFieldValue(input: {
+                    projectId: $project, 
+                    itemId: $item, 
+                    fieldId: $field, 
+                    value: {singleSelectOptionId: $value}
+                  }) { 
+                    projectV2Item { id } 
+                  }
+                }' -f project="${{ vars.PROJECT_ID }}" \
+                   -f item="$ITEM_ID" \
+                   -f field="${{ vars.PRIORITY_FIELD_ID }}" \
+                   -f value="$PRIORITY"
+            fi
+          fi

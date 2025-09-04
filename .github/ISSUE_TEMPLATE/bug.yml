@@ -1,0 +1,87 @@
+name: "Bug Report"
+description: "Report a bug"
+title: "[BUG] "
+labels: ["bug", "needs-triage"]
+body:
+  - type: textarea
+    id: bug-description
+    attributes:
+      label: "Bug Description"
+      description: "What's currently happening that shouldn't be?"
+    validations:
+      required: true
+  
+  - type: dropdown
+    id: priority
+    attributes:
+      label: "Priority"
+      options:
+        - "Critical"
+        - "High"
+        - "Medium"
+        - "Low"
+    validations:
+      required: true
+  
+  - type: textarea
+    id: reproduce-steps
+    attributes:
+      label: "Steps to Reproduce"
+      placeholder: |
+        1. Go to...
+        2. Click on...
+        3. See error
+    validations:
+      required: true
+  
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: "Expected Behavior"
+      description: "What should happen instead?"
+    validations:
+      required: true
+  
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: "Acceptance Criteria"
+      placeholder: |
+        - [ ] Bug no longer occurs
+        - [ ] No regression in related functionality
+        - [ ] [Any other specific requirements]
+    validations:
+      required: true
+  
+  - type: textarea
+    id: testing-criteria
+    attributes:
+      label: "Testing Criteria"
+      placeholder: |
+        - [ ] Verify fix works for reported scenario
+        - [ ] Test edge cases and related functionality
+        - [ ] Regression testing checklist
+        - [ ] [Specific scenarios for testing team]
+    validations:
+      required: true
+  
+  - type: input
+    id: blocked-by
+    attributes:
+      label: "Blocked by"
+      placeholder: "#issue-number or None"
+      description: "List any issues this depends on"
+  
+  - type: dropdown
+    id: story-points
+    attributes:
+      label: "Story Points"
+      options:
+        - "1"
+        - "2"
+        - "3"
+        - "5"
+        - "8"
+        - "13"
+    validations:
+      required: true

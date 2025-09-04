@@ -2,6 +2,7 @@ name: "Bug Report"
 description: "Report a bug"
 title: "[BUG] "
 labels: ["bug", "needs-triage"]
+projects: ["Standard Project Board"]
 body:
   - type: textarea
     id: bug-description

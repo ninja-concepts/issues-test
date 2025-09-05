@@ -129,7 +129,7 @@ echo "🧠 Generating PR content with AI..."
 
 # Create JSON payload using jq to properly escape
 JSON_PAYLOAD=$(jq -n \
-  --arg model "gpt-4.1-latest" \
+  --arg model "gpt-4.1" \
   --arg system_content "$SYSTEM_PROMPT" \
   --arg user_content "$USER_PROMPT" \
   '{

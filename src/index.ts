@@ -1,6 +1,7 @@
 import express, { Application } from 'express';
 import { UserService } from './services/UserService';
 import { ApiResponse } from './types/ApiResponse';
+import { runTestSuite, formatTestResult } from './utils/testUtils';
 
 const app: Application = express();
 const port = process.env.PORT || 3000;
@@ -69,12 +70,35 @@ app.get('/api/users/:id', async (req, res) => {
   }
 });
 
+app.get('/api/test/ai-workflow', (_req, res) => {
+  try {
+    const testResults = runTestSuite();
+    const formattedResults = testResults.map(formatTestResult);
+    
+    const response: ApiResponse<string[]> = {
+      success: true,
+      data: formattedResults,
+      message: 'AI workflow test suite completed'
+    };
+    res.json(response);
+  } catch (error) {
+    const response: ApiResponse<null> = {
+      success: false,
+      data: null,
+      message: 'AI workflow test failed',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    };
+    res.status(500).json(response);
+  }
+});
+
 app.listen(port, () => {
   console.log(`🚀 Server running at http://localhost:${port}`);
   console.log('📋 Available endpoints:');
   console.log('  GET / - Welcome message');
   console.log('  GET /api/users - Get all users');
   console.log('  GET /api/users/:id - Get user by ID');
+  console.log('  GET /api/test/ai-workflow - Test AI workflow functionality');
 });
 
 export default app;

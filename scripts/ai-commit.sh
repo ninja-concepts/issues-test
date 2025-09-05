@@ -92,19 +92,26 @@ Generate ONLY the commit message text, nothing else."
 
 echo "🧠 Generating commit message with AI..."
 
+# Create JSON payload using jq to properly escape
+JSON_PAYLOAD=$(jq -n \
+  --arg model "gpt-4.1-latest" \
+  --arg system_content "$SYSTEM_PROMPT" \
+  --arg user_content "$USER_PROMPT" \
+  '{
+    model: $model,
+    messages: [
+      {role: "system", content: $system_content},
+      {role: "user", content: $user_content}
+    ],
+    max_tokens: 500,
+    temperature: 0.3
+  }')
+
 # Make API request to OpenAI
 RESPONSE=$(curl -s -X POST "https://api.openai.com/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $OPENAI_API_KEY" \
-  -d "{
-    \"model\": \"gpt-4.1-latest\",
-    \"messages\": [
-      {\"role\": \"system\", \"content\": \"$SYSTEM_PROMPT\"},
-      {\"role\": \"user\", \"content\": \"$USER_PROMPT\"}
-    ],
-    \"max_tokens\": 500,
-    \"temperature\": 0.3
-  }")
+  -d "$JSON_PAYLOAD")
 
 # Check if API request was successful
 if [ $? -ne 0 ]; then

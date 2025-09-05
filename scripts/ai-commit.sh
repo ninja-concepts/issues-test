@@ -45,13 +45,66 @@ if [[ $BRANCH_NAME =~ (feature|bugfix|hotfix)/issue-([0-9]+) ]]; then
     echo "Detected issue number: #$ISSUE_NUMBER"
 fi
 
-# Get the staged diff
+# Get the staged diff with intelligent filtering
 echo "📊 Analyzing staged changes..."
-DIFF_OUTPUT=$(git diff --staged)
 
-if [ ${#DIFF_OUTPUT} -gt 8000 ]; then
-    echo -e "${YELLOW}⚠️  Large diff detected, using summary...${NC}"
+# Get all staged files
+ALL_STAGED_FILES=$(git diff --staged --name-only)
+TOTAL_STAGED=$(echo "$ALL_STAGED_FILES" | grep -c . || echo "0")
+
+if [ $TOTAL_STAGED -eq 0 ]; then
+    echo -e "${RED}❌ No staged files found${NC}"
+    exit 1
+fi
+
+echo "Found $TOTAL_STAGED staged files"
+
+# Filter out lock files and other problematic files
+FILTERED_STAGED=$(echo "$ALL_STAGED_FILES" | grep -v -E "(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|Gemfile\.lock|composer\.lock|\.min\.js|\.min\.css|\.map)$")
+
+# Further filter by gitignore if .gitignore exists
+if [ -f ".gitignore" ]; then
+    GITIGNORE_FILTERED=$(echo "$FILTERED_STAGED" | git check-ignore --stdin --non-matching 2>/dev/null || echo "$FILTERED_STAGED")
+else
+    GITIGNORE_FILTERED="$FILTERED_STAGED"
+fi
+
+# Remove empty lines
+FINAL_FILES=$(echo "$GITIGNORE_FILTERED" | grep -v '^$' || echo "")
+FINAL_COUNT=$(echo "$FINAL_FILES" | grep -c . || echo "0")
+
+# Show detailed filtering results
+EXCLUDED_COUNT=$((TOTAL_STAGED - FINAL_COUNT))
+if [ $EXCLUDED_COUNT -gt 0 ]; then
+    echo -e "${YELLOW}📋 Filtered out $EXCLUDED_COUNT files:${NC}"
+    
+    # Show what was filtered out
+    EXCLUDED_FILES=$(echo "$ALL_STAGED_FILES" | grep -v -F "$FINAL_FILES" || echo "")
+    if [ ! -z "$EXCLUDED_FILES" ]; then
+        LOCK_FILES=$(echo "$EXCLUDED_FILES" | grep -E "(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|Gemfile\.lock|composer\.lock)" || echo "")
+        BUILD_FILES=$(echo "$EXCLUDED_FILES" | grep -E "(\.min\.js|\.min\.css|\.map)$" || echo "")
+        IGNORED_FILES=$(echo "$EXCLUDED_FILES" | grep -v -E "(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|Gemfile\.lock|composer\.lock|\.min\.js|\.min\.css|\.map)$" || echo "")
+        
+        [ ! -z "$LOCK_FILES" ] && echo -e "${YELLOW}  🔒 Lock files: $(echo "$LOCK_FILES" | tr '\n' ' ')${NC}"
+        [ ! -z "$BUILD_FILES" ] && echo -e "${YELLOW}  🔧 Build artifacts: $(echo "$BUILD_FILES" | tr '\n' ' ')${NC}"
+        [ ! -z "$IGNORED_FILES" ] && echo -e "${YELLOW}  🚫 Ignored files: $(echo "$IGNORED_FILES" | tr '\n' ' ')${NC}"
+    fi
+fi
+
+if [ $FINAL_COUNT -eq 0 ]; then
+    echo -e "${YELLOW}⚠️  All staged files filtered out, using summary instead${NC}"
     DIFF_OUTPUT=$(git diff --staged --stat)
+else
+    echo -e "${GREEN}✅ Analyzing $FINAL_COUNT relevant files${NC}"
+    
+    # Generate diff for relevant files only
+    DIFF_OUTPUT=$(echo "$FINAL_FILES" | xargs git diff --staged -- 2>/dev/null || git diff --staged --stat)
+    
+    # If diff is still too large, use summary
+    if [ ${#DIFF_OUTPUT} -gt 8000 ]; then
+        echo -e "${YELLOW}⚠️  Large diff detected, using summary...${NC}"
+        DIFF_OUTPUT=$(echo "$FINAL_FILES" | xargs git diff --staged --stat -- 2>/dev/null || git diff --staged --stat)
+    fi
 fi
 
 # Prepare OpenAI API request

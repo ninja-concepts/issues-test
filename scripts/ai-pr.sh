@@ -64,9 +64,55 @@ if [ -z "$COMMIT_HISTORY" ]; then
     exit 1
 fi
 
-# Get detailed diff summary
-DIFF_SUMMARY=$(git diff $BASE_BRANCH..HEAD --stat)
-FILES_CHANGED=$(git diff $BASE_BRANCH..HEAD --name-only | wc -l)
+# Get all changed files with intelligent filtering
+ALL_CHANGED_FILES=$(git diff $BASE_BRANCH..HEAD --name-only)
+TOTAL_CHANGED=$(echo "$ALL_CHANGED_FILES" | grep -c . || echo "0")
+
+echo "Found $TOTAL_CHANGED total changed files"
+
+# Filter out lock files and other problematic files
+FILTERED_CHANGED=$(echo "$ALL_CHANGED_FILES" | grep -v -E "(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|Gemfile\.lock|composer\.lock|\.min\.js|\.min\.css|\.map)$")
+
+# Further filter by gitignore if .gitignore exists
+if [ -f ".gitignore" ]; then
+    GITIGNORE_FILTERED=$(echo "$FILTERED_CHANGED" | git check-ignore --stdin --non-matching 2>/dev/null || echo "$FILTERED_CHANGED")
+else
+    GITIGNORE_FILTERED="$FILTERED_CHANGED"
+fi
+
+# Remove empty lines
+FINAL_CHANGED_FILES=$(echo "$GITIGNORE_FILTERED" | grep -v '^$' || echo "")
+FINAL_CHANGED_COUNT=$(echo "$FINAL_CHANGED_FILES" | grep -c . || echo "0")
+
+# Show detailed filtering results
+EXCLUDED_FILES_COUNT=$((TOTAL_CHANGED - FINAL_CHANGED_COUNT))
+if [ $EXCLUDED_FILES_COUNT -gt 0 ]; then
+    echo -e "${YELLOW}📋 Filtered out $EXCLUDED_FILES_COUNT files:${NC}"
+    
+    # Show what was filtered out
+    EXCLUDED_FILES=$(echo "$ALL_CHANGED_FILES" | grep -v -F "$FINAL_CHANGED_FILES" || echo "")
+    if [ ! -z "$EXCLUDED_FILES" ]; then
+        LOCK_FILES=$(echo "$EXCLUDED_FILES" | grep -E "(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|Gemfile\.lock|composer\.lock)" || echo "")
+        BUILD_FILES=$(echo "$EXCLUDED_FILES" | grep -E "(\.min\.js|\.min\.css|\.map)$" || echo "")
+        IGNORED_FILES=$(echo "$EXCLUDED_FILES" | grep -v -E "(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|Gemfile\.lock|composer\.lock|\.min\.js|\.min\.css|\.map)$" || echo "")
+        
+        [ ! -z "$LOCK_FILES" ] && echo -e "${YELLOW}  🔒 Lock files: $(echo "$LOCK_FILES" | tr '\n' ' ')${NC}"
+        [ ! -z "$BUILD_FILES" ] && echo -e "${YELLOW}  🔧 Build artifacts: $(echo "$BUILD_FILES" | tr '\n' ' ')${NC}"
+        [ ! -z "$IGNORED_FILES" ] && echo -e "${YELLOW}  🚫 Ignored files: $(echo "$IGNORED_FILES" | tr '\n' ' ')${NC}"
+    fi
+fi
+
+if [ $FINAL_CHANGED_COUNT -eq 0 ]; then
+    echo -e "${YELLOW}⚠️  All changed files filtered out, using full summary${NC}"
+    DIFF_SUMMARY=$(git diff $BASE_BRANCH..HEAD --stat)
+    FILES_CHANGED=$TOTAL_CHANGED
+else
+    echo -e "${GREEN}✅ Analyzing $FINAL_CHANGED_COUNT relevant files${NC}"
+    
+    # Generate diff summary for relevant files only
+    DIFF_SUMMARY=$(echo "$FINAL_CHANGED_FILES" | xargs git diff $BASE_BRANCH..HEAD --stat -- 2>/dev/null || git diff $BASE_BRANCH..HEAD --stat)
+    FILES_CHANGED=$FINAL_CHANGED_COUNT
+fi
 
 echo "Found $(echo "$COMMIT_HISTORY" | wc -l) commits, $FILES_CHANGED files changed"
 

@@ -4,6 +4,7 @@ on:
     types: [opened, closed, labeled, unlabeled, assigned, unassigned]
   pull_request:
     types: [opened, closed, ready_for_review]
+  create:
 
 jobs:
   project_automation:
@@ -222,4 +223,77 @@ jobs:
                    -f field="${{ vars.PRIORITY_FIELD_ID }}" \
                    -f value="$PRIORITY"
             fi
+          fi
+
+      - name: Move to In Progress on branch creation
+        if: github.event_name == 'create' && github.event.ref_type == 'branch'
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+        run: |
+          BRANCH_NAME="${{ github.event.ref }}"
+          echo "Branch '$BRANCH_NAME' was created"
+          
+          # Extract issue number from branch name following Git Flow convention
+          ISSUE_NUMBER=""
+          if [[ "$BRANCH_NAME" == feature/issue-* ]] || [[ "$BRANCH_NAME" == bugfix/issue-* ]] || [[ "$BRANCH_NAME" == hotfix/issue-* ]]; then
+            ISSUE_NUMBER=$(echo "$BRANCH_NAME" | sed -n 's/.*issue-\([0-9]\+\).*/\1/p')
+            echo "Detected issue number: #$ISSUE_NUMBER from branch naming pattern"
+          elif [[ "$BRANCH_NAME" =~ issue-[0-9]+ ]]; then
+            ISSUE_NUMBER=$(echo "$BRANCH_NAME" | sed -n 's/.*issue-\([0-9]\+\).*/\1/p')
+            echo "Detected issue number: #$ISSUE_NUMBER from branch name"
+          fi
+          
+          if [ ! -z "$ISSUE_NUMBER" ]; then
+            echo "Moving issue #$ISSUE_NUMBER to 'In Progress' status"
+            
+            # Check if issue exists
+            if ! gh issue view $ISSUE_NUMBER >/dev/null 2>&1; then
+              echo "Issue #$ISSUE_NUMBER not found, skipping"
+              exit 0
+            fi
+            
+            # Get the project item ID for the issue
+            ITEM_ID=$(gh api graphql -f query='
+              query($project: ID!) {
+                node(id: $project) {
+                  ... on ProjectV2 {
+                    items(first: 100) {
+                      nodes {
+                        id
+                        content {
+                          ... on Issue {
+                            number
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }' -f project="${{ vars.PROJECT_ID }}" \
+              --jq ".data.node.items.nodes[] | select(.content.number == $ISSUE_NUMBER) | .id")
+            
+            if [ ! -z "$ITEM_ID" ]; then
+              # Update issue status to "In Progress"
+              gh api graphql -f query='
+                mutation($project: ID!, $item: ID!, $field: ID!, $value: String!) {
+                  updateProjectV2ItemFieldValue(input: {
+                    projectId: $project, 
+                    itemId: $item, 
+                    fieldId: $field, 
+                    value: {singleSelectOptionId: $value}
+                  }) { 
+                    projectV2Item { id } 
+                  }
+                }' -f project="${{ vars.PROJECT_ID }}" \
+                   -f item="$ITEM_ID" \
+                   -f field="${{ vars.STATUS_FIELD_ID }}" \
+                   -f value="${{ vars.IN_PROGRESS_OPTION_ID }}"
+              
+              echo "✅ Successfully moved issue #$ISSUE_NUMBER to 'In Progress' status"
+            else
+              echo "Could not find project item for issue #$ISSUE_NUMBER"
+            fi
+          else
+            echo "No issue number detected in branch name '$BRANCH_NAME'"
+            echo "Expected format: feature/issue-123-description or bugfix/issue-123-description"
           fi

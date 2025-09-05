@@ -26,12 +26,14 @@ npm install
 ### 2. Try the Workflow
 1. **Create an Issue**: Use one of the issue templates (Feature, Bug, or Technical)
 2. **Create a Branch**: Follow the naming convention `feature/issue-123-description`
+   - Issue automatically moves to "In Progress" when branch is pushed
 3. **Develop**: Write code, make commits with proper messages
 4. **Create PR**: Link to the issue with `Closes #123` in the description
 5. **Watch Magic**: Issue automatically moves to "Dev Complete" when PR merges
 
 ### 3. Observe the Automation
 - New issues automatically appear on the project board
+- Branch creation moves issues to "In Progress" status
 - Commit messages with `Closes #123` trigger status updates
 - Priority labels automatically update project fields
 - Testing workflows activate with label changes
@@ -114,11 +116,20 @@ For internal development work:
 
 ### Issue Lifecycle
 1. **Created** → Automatically added to project board as "Backlog"
-2. **Labeled** → Priority automatically updated based on labels
-3. **PR Linked** → Stays in current status during development
-4. **PR Merged** → Moves to "Dev Complete" when commit contains `Closes #123`
-5. **Testing** → Manual move to testing, or automated via labels
-6. **Done** → Closed automatically or manually
+2. **Branch Created** → Moves to "In Progress" when Git Flow branch is created (e.g., `feature/issue-123-*`)
+3. **Labeled** → Priority automatically updated based on labels
+4. **PR Linked** → Stays in current status during development
+5. **PR Merged** → Moves to "Dev Complete" when commit contains `Closes #123`
+6. **Testing** → Manual move to testing, or automated via labels
+7. **Done** → Closed automatically or manually
+
+### Branch Creation Automation
+Creating branches with Git Flow naming automatically updates issue status:
+- `feature/issue-123-description` → Moves issue #123 to "In Progress"
+- `bugfix/issue-456-fix-name` → Moves issue #456 to "In Progress"
+- `hotfix/issue-789-urgent-fix` → Moves issue #789 to "In Progress"
+
+This happens automatically via GitHub Actions when you push new branches to the repository.
 
 ### Commit Message Automation
 These commit message patterns trigger automatic issue advancement:
@@ -261,6 +272,7 @@ Generate pull request titles and descriptions:
 
 #### `./scripts/ai-workflow.sh`
 Complete end-to-end workflow automation:
+- Optional project status updates (move issues to "In Progress")
 - Interactive file staging
 - AI-generated commit creation
 - Branch pushing and PR creation
@@ -332,6 +344,7 @@ gh pr create --title "feat: implement new feature" --body "Closes #123"
 ### Validation Checklist
 - [ ] Issue templates show required field validation
 - [ ] New issues automatically appear on project board
+- [ ] Branch creation moves issues to "In Progress" status
 - [ ] Priority labels update project priority fields
 - [ ] PR merge with "Closes #123" moves issue to "Dev Complete"
 - [ ] Branch protection prevents direct pushes to main/develop
@@ -340,10 +353,11 @@ gh pr create --title "feat: implement new feature" --body "Closes #123"
 ### Common Workflow Test
 1. Create feature issue using template
 2. Note issue appears on project board as "Backlog"
-3. Create feature branch following naming convention
-4. Make commits and create PR linking to issue
-5. Verify CI runs and status checks appear
-6. Merge PR and confirm issue moves to "Dev Complete"
+3. Create feature branch following naming convention (`feature/issue-N-description`)
+4. Push branch and verify issue moves to "In Progress" status
+5. Make commits and create PR linking to issue
+6. Verify CI runs and status checks appear
+7. Merge PR and confirm issue moves to "Dev Complete"
 
 ## 🤝 Contributing
 

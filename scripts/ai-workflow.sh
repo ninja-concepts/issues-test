@@ -17,9 +17,78 @@ NC='\033[0m' # No Color
 # Script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Load project configuration if available
+if [ -f "${SCRIPT_DIR}/../.github-project-config.env" ]; then
+    source "${SCRIPT_DIR}/../.github-project-config.env"
+fi
+
 echo -e "${CYAN}🚀 AI-Assisted Development Workflow${NC}"
 echo -e "${CYAN}====================================${NC}"
 echo ""
+
+# Helper function to update project status
+update_project_status() {
+    local issue_number="$1"
+    local status_option_id="$2"
+    local status_name="$3"
+    
+    if [ -z "$PROJECT_ID" ] || [ -z "$STATUS_FIELD_ID" ] || [ -z "$status_option_id" ]; then
+        echo -e "${YELLOW}⚠️  Project configuration not found, skipping status update${NC}"
+        return 0
+    fi
+    
+    echo -e "${BLUE}📊 Updating project status for issue #$issue_number to '$status_name'...${NC}"
+    
+    # Check if issue exists
+    if ! gh issue view $issue_number >/dev/null 2>&1; then
+        echo -e "${YELLOW}⚠️  Issue #$issue_number not found, skipping status update${NC}"
+        return 0
+    fi
+    
+    # Get the project item ID for the issue
+    ITEM_ID=$(gh api graphql -f query='
+        query($project: ID!) {
+            node(id: $project) {
+                ... on ProjectV2 {
+                    items(first: 100) {
+                        nodes {
+                            id
+                            content {
+                                ... on Issue {
+                                    number
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }' -f project="$PROJECT_ID" \
+        --jq ".data.node.items.nodes[] | select(.content.number == $issue_number) | .id" 2>/dev/null)
+    
+    if [ ! -z "$ITEM_ID" ]; then
+        # Update issue status
+        if gh api graphql -f query='
+            mutation($project: ID!, $item: ID!, $field: ID!, $value: String!) {
+                updateProjectV2ItemFieldValue(input: {
+                    projectId: $project, 
+                    itemId: $item, 
+                    fieldId: $field, 
+                    value: {singleSelectOptionId: $value}
+                }) { 
+                    projectV2Item { id } 
+                }
+            }' -f project="$PROJECT_ID" \
+               -f item="$ITEM_ID" \
+               -f field="$STATUS_FIELD_ID" \
+               -f value="$status_option_id" >/dev/null 2>&1; then
+            echo -e "${GREEN}✅ Issue #$issue_number moved to '$status_name' status${NC}"
+        else
+            echo -e "${YELLOW}⚠️  Could not update status for issue #$issue_number${NC}"
+        fi
+    else
+        echo -e "${YELLOW}⚠️  Issue #$issue_number not found in project, skipping status update${NC}"
+    fi
+}
 
 # Check prerequisites
 check_prerequisites() {
@@ -177,6 +246,23 @@ main_workflow() {
         exit 1
     fi
     
+    # Step 2.5: Optional status update for issue tracking
+    ISSUE_NUMBER=""
+    if [[ $current_branch == feature/issue-* ]] || [[ $current_branch == bugfix/issue-* ]] || [[ $current_branch == hotfix/issue-* ]]; then
+        ISSUE_NUMBER=$(echo "$current_branch" | sed -n 's/.*issue-\([0-9]\+\).*/\1/p')
+        echo -e "${BLUE}🎯 Detected linked issue #$ISSUE_NUMBER${NC}"
+        
+        if [ ! -z "$IN_PROGRESS_OPTION_ID" ]; then
+            echo ""
+            read -p "$(echo -e ${YELLOW}Update issue #$ISSUE_NUMBER status to 'In Progress'? [Y/n]: ${NC})" -n 1 -r
+            echo
+            if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+                update_project_status "$ISSUE_NUMBER" "$IN_PROGRESS_OPTION_ID" "In Progress"
+            fi
+            echo ""
+        fi
+    fi
+    
     # Step 3: Show current status
     show_status
     
@@ -262,9 +348,10 @@ show_help() {
     echo ""
     echo -e "${BLUE}Workflow Steps:${NC}"
     echo "  1. Check prerequisites and branch naming"
-    echo "  2. Interactive file staging"
-    echo "  3. AI-generated commit message creation"
-    echo "  4. Optional AI-generated pull request"
+    echo "  2. Optional project status update (move issue to 'In Progress')"
+    echo "  3. Interactive file staging"
+    echo "  4. AI-generated commit message creation"
+    echo "  5. Optional AI-generated pull request"
     echo ""
     echo -e "${BLUE}Individual Scripts:${NC}"
     echo "  ./scripts/ai-commit.sh  - AI commit message generation only"

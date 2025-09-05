@@ -254,9 +254,10 @@ main_workflow() {
         
         if [ ! -z "$IN_PROGRESS_OPTION_ID" ]; then
             echo ""
-            read -p "$(echo -e ${YELLOW}Update issue #$ISSUE_NUMBER status to 'In Progress'? [Y/n]: ${NC})" -n 1 -r
+            echo -e "${YELLOW}Update issue #$ISSUE_NUMBER status to 'In Progress'? [Y/n]: ${NC}"
+            read -n 1 -r
             echo
-            if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+            if [[ "$REPLY" != "n" && "$REPLY" != "N" ]]; then
                 update_project_status "$ISSUE_NUMBER" "$IN_PROGRESS_OPTION_ID" "In Progress"
             fi
             echo ""

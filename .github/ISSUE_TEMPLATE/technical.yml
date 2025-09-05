@@ -1,0 +1,102 @@
+name: "Technical Task"
+description: "Technical work, refactoring, or infrastructure tasks"
+title: "[TECH] "
+labels: ["technical", "needs-estimation"]
+projects: ["Standard Project Board"]
+body:
+  - type: dropdown
+    id: task-type
+    attributes:
+      label: "Task Type"
+      options:
+        - "Refactoring"
+        - "Infrastructure"
+        - "Documentation"
+        - "Performance"
+        - "Security"
+        - "Dependencies"
+        - "CI/CD"
+        - "Tooling"
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: "Task Description"
+      description: "What needs to be done and why"
+    validations:
+      required: true
+
+  - type: textarea
+    id: current-state
+    attributes:
+      label: "Current State"
+      description: "Describe the current situation"
+    validations:
+      required: true
+
+  - type: textarea
+    id: desired-state
+    attributes:
+      label: "Desired State"
+      description: "Describe the target outcome"
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: "Acceptance Criteria"
+      placeholder: |
+        - [ ] Technical requirement 1
+        - [ ] Technical requirement 2
+        - [ ] Documentation updated
+        - [ ] Tests pass
+    validations:
+      required: true
+
+  - type: textarea
+    id: testing-criteria
+    attributes:
+      label: "Testing Criteria"
+      placeholder: |
+        - [ ] Unit tests for new functionality
+        - [ ] Integration tests if applicable
+        - [ ] Performance tests if applicable
+        - [ ] No regression in existing functionality
+    validations:
+      required: true
+
+  - type: input
+    id: blocked-by
+    attributes:
+      label: "Blocked by"
+      placeholder: "#issue-number or None"
+      description: "List any issues this depends on"
+
+  - type: dropdown
+    id: story-points
+    attributes:
+      label: "Story Points"
+      options:
+        - "1"
+        - "2"
+        - "3"
+        - "5"
+        - "8"
+        - "13"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: "Priority"
+      options:
+        - "Critical"
+        - "High"
+        - "Medium"
+        - "Low"
+    validations:
+      required: true

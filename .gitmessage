@@ -1,0 +1,24 @@
+# type(scope): brief description (max 50 characters)
+#
+# Longer explanation of the change (wrap at 72 characters)
+# - Explain what was changed and why
+# - Use bullet points for multiple changes
+# - Reference any relevant context
+#
+# Closes #123
+#
+# Types:
+# feat     - New feature or enhancement
+# fix      - Bug fix
+# docs     - Documentation changes
+# refactor - Code refactoring (no functional changes)
+# test     - Adding or updating tests
+# chore    - Maintenance, dependencies, build tools
+# perf     - Performance improvements
+# style    - Code style/formatting changes
+#
+# Examples:
+# feat(auth): add OAuth2 login integration
+# fix(api): resolve 500 error on user creation
+# docs: update installation instructions
+# refactor(database): optimize user query performance

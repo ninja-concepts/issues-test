@@ -1,0 +1,226 @@
+name: "Testing Handoff"
+on:
+  issues:
+    types: [labeled, unlabeled]
+  issue_comment:
+    types: [created]
+
+jobs:
+  testing_workflow:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      projects: write
+    steps:
+      - name: Generate App Token
+        id: app_token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.PROJECT_APP_ID }}
+          private-key: ${{ secrets.PROJECT_APP_KEY }}
+
+      - name: Move to Testing when assigned to QA
+        if: github.event_name == 'issues' && github.event.action == 'labeled' && github.event.label.name == 'testing'
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+        run: |
+          echo "Moving issue #${{ github.event.issue.number }} to Testing status"
+          
+          # Get the project item ID
+          ITEM_ID=$(gh api graphql -f query='
+            query($project: ID!) {
+              node(id: $project) {
+                ... on ProjectV2 {
+                  items(first: 100) {
+                    nodes {
+                      id
+                      content {
+                        ... on Issue {
+                          number
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }' -f project="${{ vars.PROJECT_ID }}" \
+            --jq ".data.node.items.nodes[] | select(.content.number == ${{ github.event.issue.number }}) | .id")
+          
+          if [ ! -z "$ITEM_ID" ]; then
+            # Update status to "Testing"
+            gh api graphql -f query='
+              mutation($project: ID!, $item: ID!, $field: ID!, $value: String!) {
+                updateProjectV2ItemFieldValue(input: {
+                  projectId: $project, 
+                  itemId: $item, 
+                  fieldId: $field, 
+                  value: {singleSelectOptionId: $value}
+                }) { 
+                  projectV2Item { id } 
+                }
+              }' -f project="${{ vars.PROJECT_ID }}" \
+                 -f item="$ITEM_ID" \
+                 -f field="${{ vars.STATUS_FIELD_ID }}" \
+                 -f value="${{ vars.TESTING_OPTION_ID }}"
+          fi
+
+      - name: Handle testing completion
+        if: github.event_name == 'issue_comment' && github.event.action == 'created'
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+        run: |
+          COMMENT_BODY="${{ github.event.comment.body }}"
+          ISSUE_NUMBER=${{ github.event.issue.number }}
+          
+          # Check if comment contains testing approval keywords
+          if [[ "$COMMENT_BODY" =~ (testing[[:space:]]+complete|tests?[[:space:]]+pass|qa[[:space:]]+approve) ]]; then
+            echo "Testing completion detected for issue #$ISSUE_NUMBER"
+            
+            # Get the project item ID
+            ITEM_ID=$(gh api graphql -f query='
+              query($project: ID!) {
+                node(id: $project) {
+                  ... on ProjectV2 {
+                    items(first: 100) {
+                      nodes {
+                        id
+                        content {
+                          ... on Issue {
+                            number
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }' -f project="${{ vars.PROJECT_ID }}" \
+              --jq ".data.node.items.nodes[] | select(.content.number == $ISSUE_NUMBER) | .id")
+            
+            if [ ! -z "$ITEM_ID" ]; then
+              # Update status to "Done"
+              gh api graphql -f query='
+                mutation($project: ID!, $item: ID!, $field: ID!, $value: String!) {
+                  updateProjectV2ItemFieldValue(input: {
+                    projectId: $project, 
+                    itemId: $item, 
+                    fieldId: $field, 
+                    value: {singleSelectOptionId: $value}
+                  }) { 
+                    projectV2Item { id } 
+                  }
+                }' -f project="${{ vars.PROJECT_ID }}" \
+                   -f item="$ITEM_ID" \
+                   -f field="${{ vars.STATUS_FIELD_ID }}" \
+                   -f value="${{ vars.DONE_OPTION_ID }}"
+              
+              # Close the issue
+              gh issue close $ISSUE_NUMBER --reason completed
+              
+              # Add completion label
+              gh issue edit $ISSUE_NUMBER --add-label "completed"
+            fi
+            
+          elif [[ "$COMMENT_BODY" =~ (test[[:space:]]+fail|testing[[:space:]]+fail|qa[[:space:]]+reject) ]]; then
+            echo "Testing failure detected for issue #$ISSUE_NUMBER"
+            
+            # Get the project item ID
+            ITEM_ID=$(gh api graphql -f query='
+              query($project: ID!) {
+                node(id: $project) {
+                  ... on ProjectV2 {
+                    items(first: 100) {
+                      nodes {
+                        id
+                        content {
+                          ... on Issue {
+                            number
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }' -f project="${{ vars.PROJECT_ID }}" \
+              --jq ".data.node.items.nodes[] | select(.content.number == $ISSUE_NUMBER) | .id")
+            
+            if [ ! -z "$ITEM_ID" ]; then
+              # Move back to "In Progress"
+              gh api graphql -f query='
+                mutation($project: ID!, $item: ID!, $field: ID!, $value: String!) {
+                  updateProjectV2ItemFieldValue(input: {
+                    projectId: $project, 
+                    itemId: $item, 
+                    fieldId: $field, 
+                    value: {singleSelectOptionId: $value}
+                  }) { 
+                    projectV2Item { id } 
+                  }
+                }' -f project="${{ vars.PROJECT_ID }}" \
+                   -f item="$ITEM_ID" \
+                   -f field="${{ vars.STATUS_FIELD_ID }}" \
+                   -f value="${{ vars.IN_PROGRESS_OPTION_ID }}"
+              
+              # Add rework label
+              gh issue edit $ISSUE_NUMBER --add-label "needs-rework"
+              
+              # Remove testing label if present
+              gh issue edit $ISSUE_NUMBER --remove-label "testing" || true
+            fi
+          fi
+
+      - name: Create testing checklist comment
+        if: github.event_name == 'issues' && github.event.action == 'labeled' && github.event.label.name == 'testing'
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+        run: |
+          # Create a testing checklist comment
+          gh issue comment ${{ github.event.issue.number }} --body "## 🧪 Testing Checklist
+
+          This issue is now ready for testing. Please verify:
+
+          ### Functional Testing
+          - [ ] All acceptance criteria are met
+          - [ ] Feature works as described
+          - [ ] Edge cases handled properly
+          - [ ] Error handling works correctly
+
+          ### Regression Testing  
+          - [ ] No existing functionality is broken
+          - [ ] Related features still work
+          - [ ] Performance is acceptable
+
+          ### Browser/Device Testing (if applicable)
+          - [ ] Works in target browsers
+          - [ ] Responsive design works
+          - [ ] Accessibility requirements met
+
+          ---
+          **To complete testing:**
+          - ✅ Comment \`testing complete\` or \`tests pass\` to mark as done
+          - ❌ Comment \`test fail\` or \`testing fail\` to return to development
+
+          **Assigned QA:** @${{ vars.QA_ASSIGNEE }}
+          "
+
+      - name: Notify on testing assignment
+        if: github.event_name == 'issues' && github.event.action == 'labeled' && github.event.label.name == 'testing'
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+          SLACK_WEBHOOK: ${{ secrets.SLACK_TESTING_WEBHOOK }}
+        run: |
+          if [ ! -z "$SLACK_WEBHOOK" ]; then
+            curl -X POST -H 'Content-type: application/json' \
+              --data "{
+                \"text\": \"🧪 New issue ready for testing\",
+                \"blocks\": [
+                  {
+                    \"type\": \"section\",
+                    \"text\": {
+                      \"type\": \"mrkdwn\",
+                      \"text\": \"*Issue #${{ github.event.issue.number }}* is ready for testing\\n<${{ github.event.issue.html_url }}|${{ github.event.issue.title }}>\"
+                    }
+                  }
+                ]
+              }" \
+              $SLACK_WEBHOOK
+          fi

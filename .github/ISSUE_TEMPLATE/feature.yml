@@ -2,6 +2,7 @@ name: "Feature Request"
 description: "New feature development"
 title: "[FEATURE] "
 labels: ["feature", "needs-estimation"]
+projects: ["Standard Project Board"]
 body:
   - type: input
     id: figma-link
@@ -9,7 +10,7 @@ body:
       label: "Figma Link"
       placeholder: "https://www.figma.com/file/..."
     validations:
-      required: false
+      required: true
   
   - type: checkboxes
     id: design-approval
@@ -17,6 +18,7 @@ body:
       label: "Design Status"
       options:
         - label: "Approved by Design Team"
+          required: true
   
   - type: textarea
     id: description

@@ -1,0 +1,429 @@
+{
+  "name": "Standard Project Board",
+  "description": "Standardized project template for all teams with complete workflow automation",
+  "readme": "This is the standard project board template that includes all necessary fields and views for effective project management. It integrates with GitHub Actions for automated workflow management.",
+  "custom_fields": [
+    {
+      "name": "Status",
+      "data_type": "single_select",
+      "description": "Current status of the issue",
+      "options": [
+        {
+          "name": "📋 Backlog",
+          "description": "New issues waiting to be prioritized",
+          "color": "gray"
+        },
+        {
+          "name": "🚀 Sprint Ready",
+          "description": "Issues ready to be worked on",
+          "color": "blue"
+        },
+        {
+          "name": "🔄 In Progress",
+          "description": "Actively being worked on",
+          "color": "yellow"
+        },
+        {
+          "name": "✅ Dev Complete",
+          "description": "Development finished, ready for testing",
+          "color": "green"
+        },
+        {
+          "name": "🧪 Testing",
+          "description": "Being tested by QA team",
+          "color": "purple"
+        },
+        {
+          "name": "✨ Done",
+          "description": "Completed and tested",
+          "color": "green"
+        }
+      ]
+    },
+    {
+      "name": "Priority",
+      "data_type": "single_select",
+      "description": "Business priority level",
+      "options": [
+        {
+          "name": "🔥 Critical",
+          "description": "Urgent issues blocking major functionality",
+          "color": "red"
+        },
+        {
+          "name": "⚠️ High",
+          "description": "Important issues that should be addressed soon",
+          "color": "orange"
+        },
+        {
+          "name": "📝 Medium",
+          "description": "Normal priority issues",
+          "color": "yellow"
+        },
+        {
+          "name": "📌 Low",
+          "description": "Nice-to-have improvements",
+          "color": "gray"
+        }
+      ]
+    },
+    {
+      "name": "Story Points",
+      "data_type": "number",
+      "description": "Effort estimation using Fibonacci sequence"
+    },
+    {
+      "name": "Sprint",
+      "data_type": "iteration",
+      "description": "Sprint assignment",
+      "settings": {
+        "duration": 14,
+        "start_day": 1,
+        "completed_iterations_display_count": 3
+      }
+    },
+    {
+      "name": "Issue Type",
+      "data_type": "single_select",
+      "description": "Category of work",
+      "options": [
+        {
+          "name": "✨ Feature",
+          "description": "New functionality",
+          "color": "green"
+        },
+        {
+          "name": "🐛 Bug",
+          "description": "Bug fixes",
+          "color": "red"
+        },
+        {
+          "name": "🔧 Technical",
+          "description": "Technical tasks and refactoring",
+          "color": "blue"
+        },
+        {
+          "name": "📚 Research",
+          "description": "Research and investigation tasks",
+          "color": "purple"
+        },
+        {
+          "name": "📖 Documentation",
+          "description": "Documentation updates",
+          "color": "gray"
+        }
+      ]
+    },
+    {
+      "name": "Team",
+      "data_type": "single_select",
+      "description": "Responsible team",
+      "options": [
+        {
+          "name": "Frontend",
+          "color": "blue"
+        },
+        {
+          "name": "Backend",
+          "color": "green"
+        },
+        {
+          "name": "DevOps",
+          "color": "orange"
+        },
+        {
+          "name": "Design",
+          "color": "purple"
+        },
+        {
+          "name": "QA",
+          "color": "yellow"
+        }
+      ]
+    },
+    {
+      "name": "Blocked",
+      "data_type": "single_select",
+      "description": "Blocking status",
+      "options": [
+        {
+          "name": "🚫 Blocked",
+          "color": "red"
+        },
+        {
+          "name": "⚠️ At Risk",
+          "color": "yellow"
+        },
+        {
+          "name": "✅ Clear",
+          "color": "green"
+        }
+      ]
+    },
+    {
+      "name": "Epic",
+      "data_type": "text",
+      "description": "Epic or major initiative this belongs to"
+    }
+  ],
+  "views": [
+    {
+      "name": "🏃 Sprint Board",
+      "description": "Kanban view of current sprint work",
+      "layout": "board",
+      "group_by_field": "Status",
+      "filter": {
+        "field": "Sprint",
+        "operator": "is",
+        "value": "current"
+      },
+      "sort": [
+        {
+          "field": "Priority",
+          "direction": "desc"
+        },
+        {
+          "field": "Story Points",
+          "direction": "asc"
+        }
+      ]
+    },
+    {
+      "name": "📋 Backlog",
+      "description": "All backlog items prioritized",
+      "layout": "table",
+      "filter": {
+        "field": "Status",
+        "operator": "is",
+        "value": "Backlog"
+      },
+      "sort": [
+        {
+          "field": "Priority",
+          "direction": "desc"
+        },
+        {
+          "field": "Story Points",
+          "direction": "asc"
+        }
+      ],
+      "visible_fields": [
+        "title",
+        "assignees",
+        "Status",
+        "Priority",
+        "Story Points",
+        "Issue Type",
+        "Team",
+        "Epic"
+      ]
+    },
+    {
+      "name": "🧪 Testing Queue",
+      "description": "Items ready for or in testing",
+      "layout": "table",
+      "filter": {
+        "field": "Status",
+        "operator": "in",
+        "value": ["Dev Complete", "Testing"]
+      },
+      "sort": [
+        {
+          "field": "Status",
+          "direction": "asc"
+        },
+        {
+          "field": "Priority",
+          "direction": "desc"
+        }
+      ],
+      "visible_fields": [
+        "title",
+        "assignees",
+        "Status",
+        "Priority",
+        "Issue Type",
+        "Team"
+      ]
+    },
+    {
+      "name": "📊 Sprint Planning",
+      "description": "Planning view with story points",
+      "layout": "table",
+      "filter": {
+        "field": "Sprint",
+        "operator": "is_empty",
+        "value": false
+      },
+      "group_by_field": "Sprint",
+      "sort": [
+        {
+          "field": "Priority",
+          "direction": "desc"
+        }
+      ],
+      "visible_fields": [
+        "title",
+        "assignees",
+        "Status",
+        "Priority",
+        "Story Points",
+        "Issue Type",
+        "Epic"
+      ]
+    },
+    {
+      "name": "🚫 Blocked Items",
+      "description": "Items that are blocked",
+      "layout": "table",
+      "filter": {
+        "field": "Blocked",
+        "operator": "is",
+        "value": "Blocked"
+      },
+      "sort": [
+        {
+          "field": "Priority",
+          "direction": "desc"
+        }
+      ],
+      "visible_fields": [
+        "title",
+        "assignees",
+        "Status",
+        "Priority",
+        "Blocked",
+        "Team"
+      ]
+    },
+    {
+      "name": "📈 Team Overview",
+      "description": "Work grouped by team",
+      "layout": "board",
+      "group_by_field": "Team",
+      "filter": {
+        "field": "Status",
+        "operator": "not_in",
+        "value": ["Done"]
+      },
+      "sort": [
+        {
+          "field": "Priority",
+          "direction": "desc"
+        }
+      ]
+    },
+    {
+      "name": "🎯 Epic Tracking",
+      "description": "Issues grouped by epic",
+      "layout": "table",
+      "group_by_field": "Epic",
+      "filter": {
+        "field": "Epic",
+        "operator": "is_not_empty"
+      },
+      "sort": [
+        {
+          "field": "Priority",
+          "direction": "desc"
+        },
+        {
+          "field": "Status",
+          "direction": "asc"
+        }
+      ],
+      "visible_fields": [
+        "title",
+        "assignees",
+        "Status",
+        "Priority",
+        "Story Points",
+        "Epic"
+      ]
+    }
+  ],
+  "automation_rules": [
+    {
+      "name": "Auto-assign new issues",
+      "trigger": "issue_opened",
+      "actions": [
+        "add_to_project",
+        "set_status_backlog"
+      ]
+    },
+    {
+      "name": "Move to dev complete on PR merge",
+      "trigger": "pull_request_merged",
+      "actions": [
+        "set_status_dev_complete",
+        "assign_to_qa"
+      ]
+    },
+    {
+      "name": "Update priority from labels",
+      "trigger": "issue_labeled",
+      "actions": [
+        "sync_priority_field"
+      ]
+    }
+  ],
+  "labels": [
+    {
+      "name": "priority:critical",
+      "color": "d73a49",
+      "description": "Critical priority issues"
+    },
+    {
+      "name": "priority:high",
+      "color": "fb8c00",
+      "description": "High priority issues"
+    },
+    {
+      "name": "priority:medium",
+      "color": "ffd600",
+      "description": "Medium priority issues"
+    },
+    {
+      "name": "priority:low",
+      "color": "6c757d",
+      "description": "Low priority issues"
+    },
+    {
+      "name": "testing",
+      "color": "9c27b0",
+      "description": "Ready for testing"
+    },
+    {
+      "name": "needs-rework",
+      "color": "e91e63",
+      "description": "Failed testing, needs rework"
+    },
+    {
+      "name": "completed",
+      "color": "4caf50",
+      "description": "Successfully completed"
+    },
+    {
+      "name": "blocked",
+      "color": "f44336",
+      "description": "Blocked by external dependency"
+    }
+  ],
+  "milestones": [
+    {
+      "title": "Sprint 1",
+      "description": "First sprint milestone",
+      "due_date": "+2 weeks"
+    },
+    {
+      "title": "MVP Release",
+      "description": "Minimum viable product release",
+      "due_date": "+8 weeks"
+    },
+    {
+      "title": "Beta Release",
+      "description": "Beta version for testing",
+      "due_date": "+12 weeks"
+    }
+  ]
+}

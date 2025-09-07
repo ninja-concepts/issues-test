@@ -1,0 +1,303 @@
+name: "Daily Stakeholder Report"
+
+on:
+  schedule:
+    # Run at 6 PM EST on weekdays (22:00 UTC)
+    - cron: '0 22 * * 1-5'
+  workflow_dispatch: # Allow manual triggering for testing
+
+jobs:
+  generate_daily_report:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+      actions: read
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Generate App Token
+        id: app_token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.PROJECT_APP_ID }}
+          private-key: ${{ secrets.PROJECT_APP_KEY }}
+
+      - name: Collect development activity
+        id: collect_data
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+        run: |
+          echo "Collecting development activity for the last 24 hours..."
+          
+          # Get date 24 hours ago in ISO format
+          SINCE_DATE=$(date -d '24 hours ago' -u +"%Y-%m-%dT%H:%M:%SZ")
+          echo "Collecting data since: $SINCE_DATE"
+          
+          # Create data directory
+          mkdir -p /tmp/daily_report_data
+          
+          # Get commits from the last 24 hours
+          echo "📊 Collecting commits..."
+          gh api repos/${{ github.repository }}/commits \
+            --field since="$SINCE_DATE" \
+            --jq '.[] | {
+              sha: .sha[0:7],
+              author: .author.login // .commit.author.name,
+              message: .commit.message,
+              date: .commit.author.date
+            }' > /tmp/daily_report_data/commits.json || echo "[]" > /tmp/daily_report_data/commits.json
+          
+          # Get PR activity from the last 24 hours
+          echo "🔀 Collecting PR activity..."
+          gh api repos/${{ github.repository }}/pulls \
+            --field state=all \
+            --field sort=updated \
+            --field direction=desc \
+            --jq --arg since "$SINCE_DATE" '
+            [.[] | select(.updated_at >= $since)] | map({
+              number: .number,
+              title: .title,
+              author: .user.login,
+              state: .state,
+              merged_at: .merged_at,
+              created_at: .created_at,
+              updated_at: .updated_at,
+              draft: .draft
+            })' > /tmp/daily_report_data/prs.json || echo "[]" > /tmp/daily_report_data/prs.json
+          
+          # Get project status changes (issues updated in the last 24 hours)
+          echo "📋 Collecting issue activity..."
+          gh api repos/${{ github.repository }}/issues \
+            --field state=all \
+            --field sort=updated \
+            --field direction=desc \
+            --jq --arg since "$SINCE_DATE" '
+            [.[] | select(.updated_at >= $since)] | map({
+              number: .number,
+              title: .title,
+              assignees: [.assignees[].login],
+              labels: [.labels[].name],
+              state: .state,
+              updated_at: .updated_at,
+              created_at: .created_at
+            })' > /tmp/daily_report_data/issues.json || echo "[]" > /tmp/daily_report_data/issues.json
+          
+          # Get current active issues (assigned and open)
+          echo "🎯 Collecting active work..."
+          gh api repos/${{ github.repository }}/issues \
+            --field state=open \
+            --jq '
+            [.[] | select(.assignees | length > 0)] | map({
+              number: .number,
+              title: .title,
+              assignees: [.assignees[].login],
+              labels: [.labels[].name],
+              created_at: .created_at
+            })' > /tmp/daily_report_data/active_issues.json || echo "[]" > /tmp/daily_report_data/active_issues.json
+          
+          echo "Data collection complete!"
+
+      - name: Generate AI email content
+        id: generate_email
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          echo "Generating AI-powered email content..."
+          
+          # Create the AI prompt script
+          cat > /tmp/generate_email_content.js << 'EOF'
+          const fs = require('fs');
+          const https = require('https');
+          
+          // Read collected data
+          const commits = JSON.parse(fs.readFileSync('/tmp/daily_report_data/commits.json', 'utf8') || '[]');
+          const prs = JSON.parse(fs.readFileSync('/tmp/daily_report_data/prs.json', 'utf8') || '[]');
+          const issues = JSON.parse(fs.readFileSync('/tmp/daily_report_data/issues.json', 'utf8') || '[]');
+          const activeIssues = JSON.parse(fs.readFileSync('/tmp/daily_report_data/active_issues.json', 'utf8') || '[]');
+          
+          const today = new Date().toLocaleDateString('en-US', { 
+            weekday: 'long', 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric' 
+          });
+          
+          const prompt = `Generate a professional, friendly daily development update email for stakeholders. 
+          
+          The tone should be:
+          - Professional but warm
+          - Focused on progress and collaboration
+          - NOT micromanaging - emphasize support and visibility
+          - When there are no commits for someone, phrase it positively like "Ali continues focused work on ticket-123"
+          
+          Today is ${today}.
+          
+          Data from the last 24 hours:
+          
+          Commits: ${JSON.stringify(commits, null, 2)}
+          Pull Requests: ${JSON.stringify(prs, null, 2)}
+          Issue Updates: ${JSON.stringify(issues, null, 2)}
+          Currently Active Work: ${JSON.stringify(activeIssues, null, 2)}
+          
+          Generate an email with:
+          1. A friendly subject line
+          2. Brief overview of team activity
+          3. Individual team member highlights (be positive even for no activity)
+          4. Any notable achievements or completions
+          5. Brief mention of upcoming work if relevant
+          
+          Keep it concise but informative. Return ONLY the email content in this format:
+          SUBJECT: [subject line]
+          BODY: [email body in HTML format]`;
+          
+          const data = JSON.stringify({
+            model: "gpt-4o-mini",
+            messages: [
+              {
+                role: "system",
+                content: "You are a helpful assistant that generates professional stakeholder update emails. Focus on positive progress reporting and team collaboration."
+              },
+              {
+                role: "user", 
+                content: prompt
+              }
+            ],
+            max_tokens: 1000,
+            temperature: 0.7
+          });
+          
+          const options = {
+            hostname: 'api.openai.com',
+            port: 443,
+            path: '/v1/chat/completions',
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+              'Content-Length': Buffer.byteLength(data)
+            }
+          };
+          
+          const req = https.request(options, (res) => {
+            let responseData = '';
+            
+            res.on('data', (chunk) => {
+              responseData += chunk;
+            });
+            
+            res.on('end', () => {
+              try {
+                const response = JSON.parse(responseData);
+                const emailContent = response.choices[0].message.content;
+                
+                // Parse the email content
+                const subjectMatch = emailContent.match(/SUBJECT:\s*(.*?)(?:\n|$)/);
+                const bodyMatch = emailContent.match(/BODY:\s*([\s\S]*?)$/);
+                
+                const subject = subjectMatch ? subjectMatch[1].trim() : `Daily Development Update - ${today}`;
+                const body = bodyMatch ? bodyMatch[1].trim() : emailContent;
+                
+                // Save to files for the next step
+                fs.writeFileSync('/tmp/email_subject.txt', subject);
+                fs.writeFileSync('/tmp/email_body.html', body);
+                
+                console.log('Email content generated successfully!');
+                console.log('Subject:', subject);
+              } catch (error) {
+                console.error('Error parsing OpenAI response:', error);
+                console.error('Response:', responseData);
+                
+                // Fallback email
+                const fallbackSubject = `Daily Development Update - ${today}`;
+                const fallbackBody = `
+                <h2>Daily Development Update</h2>
+                <p>Here's what happened in the last 24 hours:</p>
+                <ul>
+                  <li><strong>Commits:</strong> ${commits.length} commits pushed</li>
+                  <li><strong>Pull Requests:</strong> ${prs.length} PRs updated</li>
+                  <li><strong>Active Issues:</strong> ${activeIssues.length} issues in progress</li>
+                </ul>
+                <p>The team continues to make steady progress on current initiatives.</p>
+                `;
+                
+                fs.writeFileSync('/tmp/email_subject.txt', fallbackSubject);
+                fs.writeFileSync('/tmp/email_body.html', fallbackBody);
+              }
+            });
+          });
+          
+          req.on('error', (error) => {
+            console.error('Error calling OpenAI API:', error);
+            process.exit(1);
+          });
+          
+          req.write(data);
+          req.end();
+          EOF
+          
+          # Run the email generation
+          node /tmp/generate_email_content.js
+          
+          # Set outputs for next step
+          echo "EMAIL_SUBJECT=$(cat /tmp/email_subject.txt)" >> $GITHUB_OUTPUT
+          echo "EMAIL_BODY<<EOF" >> $GITHUB_OUTPUT
+          cat /tmp/email_body.html >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Send email via SendGrid
+        env:
+          SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
+          STAKEHOLDER_EMAIL: ${{ vars.STAKEHOLDER_EMAIL }}
+          FROM_EMAIL: ${{ vars.FROM_EMAIL || 'noreply@github.com' }}
+          FROM_NAME: ${{ vars.FROM_NAME || 'Development Team' }}
+        run: |
+          echo "Sending daily report email..."
+          
+          # Create SendGrid payload
+          cat > /tmp/sendgrid_payload.json << EOF
+          {
+            "personalizations": [
+              {
+                "to": [
+                  {
+                    "email": "$STAKEHOLDER_EMAIL"
+                  }
+                ]
+              }
+            ],
+            "from": {
+              "email": "$FROM_EMAIL",
+              "name": "$FROM_NAME"
+            },
+            "subject": "${{ steps.generate_email.outputs.EMAIL_SUBJECT }}",
+            "content": [
+              {
+                "type": "text/html",
+                "value": $(echo '${{ steps.generate_email.outputs.EMAIL_BODY }}' | jq -Rs .)
+              }
+            ]
+          }
+          EOF
+          
+          # Send email via SendGrid API
+          curl -X "POST" \
+            "https://api.sendgrid.com/v3/mail/send" \
+            -H "Authorization: Bearer $SENDGRID_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d @/tmp/sendgrid_payload.json
+          
+          if [ $? -eq 0 ]; then
+            echo "✅ Daily stakeholder email sent successfully!"
+          else
+            echo "❌ Failed to send daily stakeholder email"
+            exit 1
+          fi

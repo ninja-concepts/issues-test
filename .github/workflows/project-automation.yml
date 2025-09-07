@@ -159,6 +159,186 @@ jobs:
                 gh issue edit $ISSUE_NUMBER --add-assignee "${{ vars.QA_ASSIGNEE }}"
                 echo "Assigned issue #$ISSUE_NUMBER to QA: ${{ vars.QA_ASSIGNEE }}"
               fi
+              
+              # Send QA notification email
+              if [ ! -z "${{ vars.QA_EMAIL }}" ] && [ ! -z "${{ secrets.SENDGRID_API_KEY }}" ]; then
+                echo "Sending QA notification email for issue #$ISSUE_NUMBER"
+                
+                # Get issue details for email
+                ISSUE_DETAILS=$(gh api repos/${{ github.repository }}/issues/$ISSUE_NUMBER --jq '{
+                  number: .number,
+                  title: .title,
+                  body: .body,
+                  assignees: [.assignees[].login],
+                  labels: [.labels[].name],
+                  html_url: .html_url
+                }')
+                
+                # Get PR details
+                PR_DETAILS=$(gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }} --jq '{
+                  number: .number,
+                  title: .title,
+                  html_url: .html_url,
+                  user: .user.login,
+                  merged_at: .merged_at
+                }')
+                
+                # Create email content using AI
+                cat > /tmp/qa_email_generator.js << 'JSEOF'
+const fs = require('fs');
+const https = require('https');
+
+const issueDetails = JSON.parse(process.env.ISSUE_DETAILS);
+const prDetails = JSON.parse(process.env.PR_DETAILS);
+const today = new Date().toLocaleDateString('en-US', { 
+  weekday: 'long', 
+  year: 'numeric', 
+  month: 'long', 
+  day: 'numeric' 
+});
+
+const prompt = `Generate a professional QA notification email for a development ticket that's ready for testing.
+
+Issue Details:
+${JSON.stringify(issueDetails, null, 2)}
+
+Pull Request Details:
+${JSON.stringify(prDetails, null, 2)}
+
+Create an email that:
+1. Has a clear, actionable subject line
+2. Provides context about what was developed
+3. Includes testing requirements if available in the issue body
+4. Has links to both the issue and merged PR
+5. Is professional and helpful for the QA team
+
+Return in format:
+SUBJECT: [subject line]
+BODY: [email body in HTML format]`;
+
+const data = JSON.stringify({
+  model: "gpt-4o-mini",
+  messages: [
+    {
+      role: "system",
+      content: "You are a helpful assistant that generates professional QA notification emails. Focus on providing clear context and actionable information for testing."
+    },
+    {
+      role: "user", 
+      content: prompt
+    }
+  ],
+  max_tokens: 800,
+  temperature: 0.5
+});
+
+const options = {
+  hostname: 'api.openai.com',
+  port: 443,
+  path: '/v1/chat/completions',
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+    'Content-Length': Buffer.byteLength(data)
+  }
+};
+
+const req = https.request(options, (res) => {
+  let responseData = '';
+  
+  res.on('data', (chunk) => {
+    responseData += chunk;
+  });
+  
+  res.on('end', () => {
+    try {
+      const response = JSON.parse(responseData);
+      const emailContent = response.choices[0].message.content;
+      
+      const subjectMatch = emailContent.match(/SUBJECT:\s*(.*?)(?:\n|$)/);
+      const bodyMatch = emailContent.match(/BODY:\s*([\s\S]*?)$/);
+      
+      const subject = subjectMatch ? subjectMatch[1].trim() : `Ready for QA: Issue #${issueDetails.number} - ${issueDetails.title}`;
+      const body = bodyMatch ? bodyMatch[1].trim() : emailContent;
+      
+      fs.writeFileSync('/tmp/qa_email_subject.txt', subject);
+      fs.writeFileSync('/tmp/qa_email_body.html', body);
+      
+      console.log('QA email content generated successfully!');
+    } catch (error) {
+      console.error('Error generating QA email:', error);
+      
+      // Fallback email
+      const fallbackSubject = `Ready for QA: Issue #${issueDetails.number} - ${issueDetails.title}`;
+      const fallbackBody = `
+      <h2>Ready for QA Testing</h2>
+      <p><strong>Issue #${issueDetails.number}:</strong> <a href="${issueDetails.html_url}">${issueDetails.title}</a></p>
+      <p><strong>Merged PR:</strong> <a href="${prDetails.html_url}">#${prDetails.number} - ${prDetails.title}</a></p>
+      <p><strong>Developer:</strong> ${prDetails.user}</p>
+      <p><strong>Priority:</strong> ${issueDetails.labels.filter(l => l.startsWith('priority:')).join(', ') || 'Normal'}</p>
+      <p>This ticket has been completed and is ready for testing. Please review the issue description and acceptance criteria.</p>
+      `;
+      
+      fs.writeFileSync('/tmp/qa_email_subject.txt', fallbackSubject);
+      fs.writeFileSync('/tmp/qa_email_body.html', fallbackBody);
+    }
+  });
+});
+
+req.on('error', (error) => {
+  console.error('Error calling OpenAI API:', error);
+  process.exit(1);
+});
+
+req.write(data);
+req.end();
+JSEOF
+
+                # Generate email content
+                ISSUE_DETAILS="$ISSUE_DETAILS" PR_DETAILS="$PR_DETAILS" OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}" node /tmp/qa_email_generator.js
+                
+                # Send email via SendGrid
+                QA_SUBJECT=$(cat /tmp/qa_email_subject.txt)
+                QA_BODY=$(cat /tmp/qa_email_body.html)
+                
+                cat > /tmp/qa_sendgrid_payload.json << JSONEOF
+{
+  "personalizations": [
+    {
+      "to": [
+        {
+          "email": "${{ vars.QA_EMAIL }}"
+        }
+      ]
+    }
+  ],
+  "from": {
+    "email": "${{ vars.FROM_EMAIL || 'noreply@github.com' }}",
+    "name": "${{ vars.FROM_NAME || 'Development Team' }}"
+  },
+  "subject": $(echo "$QA_SUBJECT" | jq -Rs .),
+  "content": [
+    {
+      "type": "text/html",
+      "value": $(echo "$QA_BODY" | jq -Rs .)
+    }
+  ]
+}
+JSONEOF
+
+                curl -X "POST" \
+                  "https://api.sendgrid.com/v3/mail/send" \
+                  -H "Authorization: Bearer ${{ secrets.SENDGRID_API_KEY }}" \
+                  -H "Content-Type: application/json" \
+                  -d @/tmp/qa_sendgrid_payload.json
+                
+                if [ $? -eq 0 ]; then
+                  echo "✅ QA notification email sent successfully!"
+                else
+                  echo "❌ Failed to send QA notification email"
+                fi
+              fi
             fi
           else
             echo "No linked issue found in PR body"

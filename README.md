@@ -286,6 +286,14 @@ Generate pull request titles and descriptions:
 - Respects Git Flow branch targeting rules
 - Uses your existing PR template format
 
+#### `./scripts/ai-release-notes.sh`
+Generate AI-powered release notes from commit history:
+- Analyzes conventional commits between releases
+- Groups features, fixes, and improvements automatically
+- Creates professional changelog entries
+- Integrates with Git Flow release branches
+- Generates structured markdown for release documentation
+
 #### `./scripts/ai-workflow.sh`
 Complete end-to-end workflow automation:
 - Optional project status updates (move issues to "In Progress")
@@ -396,33 +404,38 @@ gh pr create --title "feat: implement new feature" --body "Closes #123"
 
 This workflow minimizes meeting overhead through automation while maintaining effective team collaboration.
 
-### **Recommended Schedule: 2 Focused Meetings**
+### **Recommended Schedule: 2 Focused Stakeholder Meetings**
 
-#### **End of Sprint Retrospective** (1 Hour - Evening)
-- **Purpose**: Reflect and improve
+#### **End of Sprint Retrospective with Stakeholders** (1 Hour - Evening)
+- **Purpose**: Reflect, demonstrate, and improve
 - **Timing**: Last day of sprint, end of day
+- **Participants**: Development team + key stakeholders
 - **Agenda**:
-  - Review completed work using GitHub Projects dashboard
-  - Analyze automation effectiveness and workflow metrics
-  - Identify process improvements and blockers
-  - Celebrate team achievements and learnings
+  - Demo completed features using live system
+  - Review sprint metrics via GitHub Projects dashboard
+  - Gather stakeholder feedback on delivered functionality
+  - Identify process improvements and address concerns
+  - Celebrate achievements and acknowledge contributions
 
-#### **Start of Sprint Planning** (1 Hour - Next Morning)
-- **Purpose**: Plan and prioritize 
-- **Timing**: First day of new sprint, morning
+#### **Start of Sprint Planning with Stakeholders** (1 Hour - Next Morning)
+- **Purpose**: Align priorities and set clear expectations
+- **Timing**: First day of new sprint, morning  
+- **Participants**: Development team + stakeholders + product owner
 - **Agenda**:
-  - Review and prioritize backlog using project board views
-  - Assign story points via issue templates
-  - Set sprint capacity and team goals
-  - Discuss dependencies and technical considerations
+  - Review prioritized backlog with stakeholder input
+  - Clarify requirements and acceptance criteria
+  - Estimate effort using story points from issue templates
+  - Set realistic sprint goals and capacity
+  - Address dependencies and technical constraints
 
-### **Daily "Standups" → Automated via GitHub Projects**
+### **Daily "Standups" → Automated via GitHub Projects + AI Reports**
 
 **Replace daily standup meetings with:**
 - **🏃 Sprint Board Dashboard**: Real-time view of who's working on what
 - **📊 Project Status Views**: Automatic status updates through Git Flow
 - **💬 Async Issue Comments**: Team members update blockers and progress
-- **📧 Daily Stakeholder Reports**: AI-generated progress emails (no meeting required)
+- **📧 Daily AI-Generated Reports**: Professional progress emails sent to all stakeholders automatically
+- **🤖 Intelligent Summaries**: AI analyzes commits, PRs, and issue activity to create human-like progress updates
 
 **Only meet synchronously when:**
 - Critical blockers need immediate discussion
@@ -447,11 +460,13 @@ This workflow minimizes meeting overhead through automation while maintaining ef
 
 ### **Meeting Efficiency Benefits**
 
-- **75% reduction in meeting time**: From 5+ hours/week to 2 hours bi-weekly
+- **Focused stakeholder alignment**: 2 hours bi-weekly with stakeholders present for key decisions
+- **Daily automated updates**: AI-generated progress reports eliminate need for daily standups
 - **Real-time transparency**: Status visible anytime via project dashboards
 - **Context preservation**: All discussions linked to issues and PRs
-- **Developer focus**: Minimal interruption to deep work
-- **Stakeholder satisfaction**: Better visibility with less overhead
+- **Developer focus**: Minimal meeting interruption to deep work
+- **Stakeholder satisfaction**: Direct involvement in planning and demos, daily progress visibility
+- **AI-powered communication**: Professional progress summaries and release notes generated automatically
 
 ## 🤝 Contributing
 

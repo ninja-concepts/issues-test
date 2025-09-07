@@ -217,7 +217,7 @@ SUBJECT: [subject line]
 BODY: [email body in HTML format]`;
 
 const data = JSON.stringify({
-  model: "gpt-4o-mini",
+  model: "gpt-4.1",
   messages: [
     {
       role: "system",

@@ -27,6 +27,8 @@ jobs:
         with:
           app-id: ${{ vars.PROJECT_APP_ID }}
           private-key: ${{ secrets.PROJECT_APP_KEY }}
+          owner: ninja-concepts
+          repositories: issues-test
 
       - name: Auto-assign new issues to project
         if: github.event_name == 'issues' && github.event.action == 'opened'

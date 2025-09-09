@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       issues: write
-      projects: write
+      repository-projects: write
     steps:
       - name: Generate App Token
         id: app_token
@@ -18,6 +18,8 @@ jobs:
         with:
           app-id: ${{ vars.PROJECT_APP_ID }}
           private-key: ${{ secrets.PROJECT_APP_KEY }}
+          owner: ninja-concepts
+          repositories: issues-test
 
       - name: Move to Testing when assigned to QA
         if: github.event_name == 'issues' && github.event.action == 'labeled' && github.event.label.name == 'testing'

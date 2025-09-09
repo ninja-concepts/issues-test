@@ -13,9 +13,10 @@ jobs:
   project_automation:
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       issues: write
       pull-requests: write
-      projects: write
+      repository-projects: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -196,30 +197,18 @@ jobs:
                 QA_SUBJECT=$(cat /tmp/qa_email_subject.txt)
                 QA_BODY=$(cat /tmp/qa_email_body.html)
                 
-                cat > /tmp/qa_sendgrid_payload.json << JSONEOF
-{
-  "personalizations": [
-    {
-      "to": [
-        {
-          "email": "${{ vars.QA_EMAIL }}"
-        }
-      ]
-    }
-  ],
-  "from": {
-    "email": "${{ vars.FROM_EMAIL || 'noreply@github.com' }}",
-    "name": "${{ vars.FROM_NAME || 'Development Team' }}"
-  },
-  "subject": $(echo "$QA_SUBJECT" | jq -Rs .),
-  "content": [
-    {
-      "type": "text/html",
-      "value": $(echo "$QA_BODY" | jq -Rs .)
-    }
-  ]
-}
-JSONEOF
+                jq -n \
+                  --arg to "${{ vars.QA_EMAIL }}" \
+                  --arg fromEmail "${{ vars.FROM_EMAIL || 'noreply@github.com' }}" \
+                  --arg fromName "${{ vars.FROM_NAME || 'Development Team' }}" \
+                  --arg subject "$QA_SUBJECT" \
+                  --arg body "$QA_BODY" \
+                  '{
+                    personalizations: [{to: [{email: $to}]}],
+                    from: {email: $fromEmail, name: $fromName},
+                    subject: $subject,
+                    content: [{type: "text/html", value: $body}]
+                  }' > /tmp/qa_sendgrid_payload.json
 
                 curl -X "POST" \
                   "https://api.sendgrid.com/v3/mail/send" \

@@ -16,7 +16,11 @@
     "start": "node dist/index.js",
     "clean": "rimraf dist coverage"
   },
-  "keywords": ["demo", "git-flow", "ci-cd"],
+  "keywords": [
+    "demo",
+    "git-flow",
+    "ci-cd"
+  ],
   "author": "Demo Project",
   "license": "MIT",
   "devDependencies": {
@@ -34,7 +38,7 @@
     "typescript": "^5.0.0",
     "webpack": "^5.80.0",
     "webpack-cli": "^5.1.0",
-    "webpack-dev-server": "^4.15.0"
+    "webpack-dev-server": "^5.2.2"
   },
   "dependencies": {
     "express": "^4.18.0"

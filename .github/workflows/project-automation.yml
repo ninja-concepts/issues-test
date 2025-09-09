@@ -187,7 +187,7 @@ jobs:
                 }')
                 
                 # Create email content using AI
-                cat > /tmp/qa_email_generator.js << JSEOF
+                cat > /tmp/qa_email_generator.js << 'EOF'
 const fs = require('fs');
 const https = require('https');
 
@@ -296,7 +296,7 @@ req.on('error', (error) => {
 
 req.write(data);
 req.end();
-JSEOF
+EOF
 
                 # Generate email content
                 ISSUE_DETAILS="$ISSUE_DETAILS" PR_DETAILS="$PR_DETAILS" OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}" node /tmp/qa_email_generator.js

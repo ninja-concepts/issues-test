@@ -1,0 +1,55 @@
+# Configuration for development teams
+language: "en-US"
+
+reviews:
+profile: "assertive"
+high_level_summary: true
+auto_review:
+enabled: true
+drafts: false
+ignore_title_keywords:
+  - "wip"
+  - "draft"
+tools:
+eslint:
+  enabled: true
+ruff:
+  enabled: false  # Python tool, not needed for Node.js project
+gitleaks:
+  enabled: true
+hadolint:
+  enabled: false  # Docker linter, not needed for this project
+
+chat:
+auto_reply: true
+
+knowledge_base:
+  code_guidelines:
+    enabled: true
+    filePatterns:
+      - "**/.cursorrules"
+      - "**/CODING_STANDARDS.md"
+      - "**/CONTRIBUTING.md"
+      - "**/README.md"
+
+# Path-based configuration for this project
+path_instructions:
+  - path: "src/**"
+    instructions: |
+      Focus on TypeScript type safety, Express.js security patterns,
+      and proper error handling. This is the main application code.
+  
+  - path: "tests/**"
+    instructions: |
+      Review test quality, coverage, and Jest best practices.
+      Ensure tests properly validate functionality.
+      
+  - path: "scripts/**"  
+    instructions: |
+      Review automation scripts for security and reliability.
+      These scripts are part of the AI-enhanced workflow.
+      
+  - path: ".github/workflows/**"
+    instructions: |
+      Review GitHub Actions for security best practices,
+      proper secret handling, and workflow efficiency.

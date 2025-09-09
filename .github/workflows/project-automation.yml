@@ -5,21 +5,58 @@ on:
   pull_request:
     types: [opened, closed, ready_for_review]
   create:
+  push:
+    branches-ignore:
+      - main
 
 jobs:
   project_automation:
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       issues: write
       pull-requests: write
-      projects: write
+      repository-projects: write
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Generate App Token
         id: app_token
         uses: actions/create-github-app-token@v1
         with:
           app-id: ${{ vars.PROJECT_APP_ID }}
           private-key: ${{ secrets.PROJECT_APP_KEY }}
+          owner: ninja-concepts
+
+      - name: Resolve Project Node ID
+        id: resolve_project
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+        run: |
+          # If PROJECT_OWNER and PROJECT_NUMBER are provided, resolve node id; else use PROJECT_ID
+          if [ -n "${{ vars.PROJECT_OWNER }}" ] && [ -n "${{ vars.PROJECT_NUMBER }}" ]; then
+            echo "Resolving project node id from owner/number: ${{ vars.PROJECT_OWNER }}#${{ vars.PROJECT_NUMBER }}"
+            NODE_ID=$(gh api graphql -f query='
+              query($owner: String!, $number: Int!) {
+                organization(login: $owner) { projectV2(number: $number) { id }
+              }
+            }' -f owner='${{ vars.PROJECT_OWNER }}' -F number='${{ vars.PROJECT_NUMBER }}' --jq '.data.organization.projectV2.id' 2>/dev/null)
+            if [ -z "$NODE_ID" ]; then
+              NODE_ID=$(gh api graphql -f query='
+                query($owner: String!, $number: Int!) {
+                  user(login: $owner) { projectV2(number: $number) { id } }
+                }' -f owner='${{ vars.PROJECT_OWNER }}' -F number='${{ vars.PROJECT_NUMBER }}' --jq '.data.user.projectV2.id' 2>/dev/null)
+            fi
+            if [ -z "$NODE_ID" ]; then
+              echo "Failed to resolve project node id from owner/number" >&2
+              exit 1
+            fi
+            echo "PROJECT_NODE_ID=$NODE_ID" >> $GITHUB_OUTPUT
+          else
+            echo "Using PROJECT_ID variable as node id"
+            echo "PROJECT_NODE_ID=${{ vars.PROJECT_ID }}" >> $GITHUB_OUTPUT
+          fi
 
       - name: Auto-assign new issues to project
         if: github.event_name == 'issues' && github.event.action == 'opened'
@@ -48,7 +85,7 @@ jobs:
                   }
                 }
               }
-            }' -f project="${{ vars.PROJECT_ID }}" -f issue="${{ github.event.issue.node_id }}"
+            }' -f project="${{ steps.resolve_project.outputs.PROJECT_NODE_ID }}" -f issue="${{ github.event.issue.node_id }}"
 
       - name: Set initial status for new issues
         if: github.event_name == 'issues' && github.event.action == 'opened'
@@ -74,7 +111,7 @@ jobs:
                   }
                 }
               }
-            }' -f project="${{ vars.PROJECT_ID }}" \
+            }' -f project="${{ steps.resolve_project.outputs.PROJECT_NODE_ID }}" \
             --jq ".data.node.items.nodes[] | select(.content.number == ${{ github.event.issue.number }}) | .id")
           
           # Set status to "Backlog"
@@ -89,7 +126,7 @@ jobs:
                 }) { 
                   projectV2Item { id } 
                 }
-              }' -f project="${{ vars.PROJECT_ID }}" \
+              }' -f project="${{ steps.resolve_project.outputs.PROJECT_NODE_ID }}" \
                  -f item="$ITEM_ID" \
                  -f field="${{ vars.STATUS_FIELD_ID }}" \
                  -f value="${{ vars.BACKLOG_OPTION_ID }}"
@@ -134,7 +171,7 @@ jobs:
                     }
                   }
                 }
-              }' -f project="${{ vars.PROJECT_ID }}" \
+              }' -f project="${{ steps.resolve_project.outputs.PROJECT_NODE_ID }}" \
               --jq ".data.node.items.nodes[] | select(.content.number == $ISSUE_NUMBER) | .id")
             
             if [ ! -z "$ITEM_ID" ]; then
@@ -149,7 +186,7 @@ jobs:
                   }) { 
                     projectV2Item { id } 
                   }
-                }' -f project="${{ vars.PROJECT_ID }}" \
+                }' -f project="${{ steps.resolve_project.outputs.PROJECT_NODE_ID }}" \
                    -f item="$ITEM_ID" \
                    -f field="${{ vars.STATUS_FIELD_ID }}" \
                    -f value="${{ vars.DEV_COMPLETE_OPTION_ID }}"
@@ -183,149 +220,25 @@ jobs:
                   merged_at: .merged_at
                 }')
                 
-                # Create email content using AI
-                cat > /tmp/qa_email_generator.js << 'JSEOF'
-const fs = require('fs');
-const https = require('https');
-
-const issueDetails = JSON.parse(process.env.ISSUE_DETAILS);
-const prDetails = JSON.parse(process.env.PR_DETAILS);
-const today = new Date().toLocaleDateString('en-US', { 
-  weekday: 'long', 
-  year: 'numeric', 
-  month: 'long', 
-  day: 'numeric' 
-});
-
-const prompt = `Generate a professional QA notification email for a development ticket that's ready for testing.
-
-Issue Details:
-${JSON.stringify(issueDetails, null, 2)}
-
-Pull Request Details:
-${JSON.stringify(prDetails, null, 2)}
-
-Create an email that:
-1. Has a clear, actionable subject line
-2. Provides context about what was developed
-3. Includes testing requirements if available in the issue body
-4. Has links to both the issue and merged PR
-5. Is professional and helpful for the QA team
-
-Return in format:
-SUBJECT: [subject line]
-BODY: [email body in HTML format]`;
-
-const data = JSON.stringify({
-  model: "gpt-4.1",
-  messages: [
-    {
-      role: "system",
-      content: "You are a helpful assistant that generates professional QA notification emails. Focus on providing clear context and actionable information for testing."
-    },
-    {
-      role: "user", 
-      content: prompt
-    }
-  ],
-  max_tokens: 800,
-  temperature: 0.5
-});
-
-const options = {
-  hostname: 'api.openai.com',
-  port: 443,
-  path: '/v1/chat/completions',
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-    'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-    'Content-Length': Buffer.byteLength(data)
-  }
-};
-
-const req = https.request(options, (res) => {
-  let responseData = '';
-  
-  res.on('data', (chunk) => {
-    responseData += chunk;
-  });
-  
-  res.on('end', () => {
-    try {
-      const response = JSON.parse(responseData);
-      const emailContent = response.choices[0].message.content;
-      
-      const subjectMatch = emailContent.match(/SUBJECT:\s*(.*?)(?:\n|$)/);
-      const bodyMatch = emailContent.match(/BODY:\s*([\s\S]*?)$/);
-      
-      const subject = subjectMatch ? subjectMatch[1].trim() : `Ready for QA: Issue #${issueDetails.number} - ${issueDetails.title}`;
-      const body = bodyMatch ? bodyMatch[1].trim() : emailContent;
-      
-      fs.writeFileSync('/tmp/qa_email_subject.txt', subject);
-      fs.writeFileSync('/tmp/qa_email_body.html', body);
-      
-      console.log('QA email content generated successfully!');
-    } catch (error) {
-      console.error('Error generating QA email:', error);
-      
-      // Fallback email
-      const fallbackSubject = `Ready for QA: Issue #${issueDetails.number} - ${issueDetails.title}`;
-      const fallbackBody = `
-      <h2>Ready for QA Testing</h2>
-      <p><strong>Issue #${issueDetails.number}:</strong> <a href="${issueDetails.html_url}">${issueDetails.title}</a></p>
-      <p><strong>Merged PR:</strong> <a href="${prDetails.html_url}">#${prDetails.number} - ${prDetails.title}</a></p>
-      <p><strong>Developer:</strong> ${prDetails.user}</p>
-      <p><strong>Priority:</strong> ${issueDetails.labels.filter(l => l.startsWith('priority:')).join(', ') || 'Normal'}</p>
-      <p>This ticket has been completed and is ready for testing. Please review the issue description and acceptance criteria.</p>
-      `;
-      
-      fs.writeFileSync('/tmp/qa_email_subject.txt', fallbackSubject);
-      fs.writeFileSync('/tmp/qa_email_body.html', fallbackBody);
-    }
-  });
-});
-
-req.on('error', (error) => {
-  console.error('Error calling OpenAI API:', error);
-  process.exit(1);
-});
-
-req.write(data);
-req.end();
-JSEOF
-
-                # Generate email content
-                ISSUE_DETAILS="$ISSUE_DETAILS" PR_DETAILS="$PR_DETAILS" OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}" node /tmp/qa_email_generator.js
+                # Generate email content using repository script
+                ISSUE_DETAILS="$ISSUE_DETAILS" PR_DETAILS="$PR_DETAILS" OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}" node scripts/generate-qa-email.js
                 
                 # Send email via SendGrid
                 QA_SUBJECT=$(cat /tmp/qa_email_subject.txt)
                 QA_BODY=$(cat /tmp/qa_email_body.html)
                 
-                cat > /tmp/qa_sendgrid_payload.json << JSONEOF
-{
-  "personalizations": [
-    {
-      "to": [
-        {
-          "email": "${{ vars.QA_EMAIL }}"
-        }
-      ]
-    }
-  ],
-  "from": {
-    "email": "${{ vars.FROM_EMAIL || 'noreply@github.com' }}",
-    "name": "${{ vars.FROM_NAME || 'Development Team' }}"
-  },
-  "subject": $(echo "$QA_SUBJECT" | jq -Rs .),
-  "content": [
-    {
-      "type": "text/html",
-      "value": $(echo "$QA_BODY" | jq -Rs .)
-    }
-  ]
-}
-JSONEOF
+                jq -n \
+                  --arg to "${{ vars.QA_EMAIL }}" \
+                  --arg fromEmail "${{ vars.FROM_EMAIL || 'noreply@github.com' }}" \
+                  --arg fromName "${{ vars.FROM_NAME || 'Development Team' }}" \
+                  --arg subject "$QA_SUBJECT" \
+                  --arg body "$QA_BODY" \
+                  '{
+                    personalizations: [{to: [{email: $to}]}],
+                    from: {email: $fromEmail, name: $fromName},
+                    subject: $subject,
+                    content: [{type: "text/html", value: $body}]
+                  }' > /tmp/qa_sendgrid_payload.json
 
                 curl -X "POST" \
                   "https://api.sendgrid.com/v3/mail/send" \
@@ -383,7 +296,7 @@ JSONEOF
                     }
                   }
                 }
-              }' -f project="${{ vars.PROJECT_ID }}" \
+              }' -f project="${{ steps.resolve_project.outputs.PROJECT_NODE_ID }}" \
               --jq ".data.node.items.nodes[] | select(.content.number == ${{ github.event.issue.number }}) | .id")
             
             if [ ! -z "$ITEM_ID" ]; then
@@ -398,7 +311,7 @@ JSONEOF
                   }) { 
                     projectV2Item { id } 
                   }
-                }' -f project="${{ vars.PROJECT_ID }}" \
+                }' -f project="${{ steps.resolve_project.outputs.PROJECT_NODE_ID }}" \
                    -f item="$ITEM_ID" \
                    -f field="${{ vars.PRIORITY_FIELD_ID }}" \
                    -f value="$PRIORITY"
@@ -406,12 +319,16 @@ JSONEOF
           fi
 
       - name: Move to In Progress on branch creation
-        if: github.event_name == 'create' && github.event.ref_type == 'branch'
+        if: (github.event_name == 'create' && github.event.ref_type == 'branch') || (github.event_name == 'push' && github.ref != 'refs/heads/main')
         env:
           GH_TOKEN: ${{ steps.app_token.outputs.token }}
         run: |
-          BRANCH_NAME="${{ github.event.ref }}"
-          echo "Branch '$BRANCH_NAME' was created"
+          if [ "${{ github.event_name }}" = "create" ]; then
+            BRANCH_NAME="${{ github.event.ref }}"
+          else
+            BRANCH_NAME="${{ github.ref_name }}"
+          fi
+          echo "Branch '$BRANCH_NAME' was created/pushed"
           
           # Extract issue number from branch name following Git Flow convention
           ISSUE_NUMBER=""
@@ -431,6 +348,9 @@ JSONEOF
               echo "Issue #$ISSUE_NUMBER not found, skipping"
               exit 0
             fi
+
+            # Get issue node id (needed to add to project if missing)
+            ISSUE_NODE_ID=$(gh api repos/${{ github.repository }}/issues/$ISSUE_NUMBER --jq '.node_id')
             
             # Get the project item ID for the issue
             ITEM_ID=$(gh api graphql -f query='
@@ -449,9 +369,21 @@ JSONEOF
                     }
                   }
                 }
-              }' -f project="${{ vars.PROJECT_ID }}" \
+              }' -f project="${{ steps.resolve_project.outputs.PROJECT_NODE_ID }}" \
               --jq ".data.node.items.nodes[] | select(.content.number == $ISSUE_NUMBER) | .id")
             
+            # If not found in the first page of items, try adding the issue to the project
+            if [ -z "$ITEM_ID" ]; then
+              echo "Project item for issue #$ISSUE_NUMBER not found in project; adding it now"
+              ITEM_ID=$(gh api graphql -f query='
+                mutation($project: ID!, $issue: ID!) {
+                  addProjectV2ItemById(input: {projectId: $project, contentId: $issue}) {
+                    item { id }
+                  }
+                }
+              ' -f project="${{ steps.resolve_project.outputs.PROJECT_NODE_ID }}" -f issue="$ISSUE_NODE_ID" --jq ".data.addProjectV2ItemById.item.id")
+            fi
+
             if [ ! -z "$ITEM_ID" ]; then
               # Update issue status to "In Progress"
               gh api graphql -f query='
@@ -464,7 +396,7 @@ JSONEOF
                   }) { 
                     projectV2Item { id } 
                   }
-                }' -f project="${{ vars.PROJECT_ID }}" \
+                }' -f project="${{ steps.resolve_project.outputs.PROJECT_NODE_ID }}" \
                    -f item="$ITEM_ID" \
                    -f field="${{ vars.STATUS_FIELD_ID }}" \
                    -f value="${{ vars.IN_PROGRESS_OPTION_ID }}"

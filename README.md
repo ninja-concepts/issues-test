@@ -1,14 +1,15 @@
-# GitHub Issues + Projects Workflow Demo
+# GitHub Issues + Projects Workflow Demo with AI-Enhanced Code Reviews
 
-A comprehensive demonstration of GitHub's native Issues and Projects workflow, showing how developers can manage tasks, features, and bugs seamlessly within the GitHub ecosystem. This project showcases issue templates, project automation, and Git Flow integration that keeps developers in their natural environment.
+A comprehensive demonstration of GitHub's native Issues and Projects workflow, enhanced with AI-powered code reviews through CodeRabbit. This project showcases issue templates, project automation, Git Flow integration, and intelligent code analysis that keeps developers in their natural environment.
 
-> **Note**: The TypeScript/Node.js code in this repository is purely for CI/CD demonstration purposes. The real value lies in the **templates, automation, and workflow integration**.
+> **Note**: The TypeScript/Node.js code in this repository is purely for CI/CD demonstration purposes. The real value lies in the **templates, automation, workflow integration, and AI-enhanced code reviews**.
 
 ## 🎯 What This Demonstrates
 
 - **Issue Templates**: Structured, validated templates for Features, Bugs, and Technical tasks
 - **Automatic Project Management**: Issues automatically appear on project boards with proper categorization
 - **Commit-Driven Workflow**: Git commit messages advance issue status without manual updates
+- **AI-Powered Code Reviews**: CodeRabbit provides intelligent, context-aware code analysis
 - **Seamless Integration**: Everything happens within GitHub - no context switching between tools
 - **Developer-Centric Automation**: Workflows designed around how developers actually work
 
@@ -29,11 +30,13 @@ npm install
    - Issue automatically moves to "In Progress" when branch is pushed
 3. **Develop**: Write code, make commits with proper messages
 4. **Create PR**: Link to the issue with `Closes #123` in the description
+   - CodeRabbit automatically reviews your code with AI analysis
 5. **Watch Magic**: Issue automatically moves to "Dev Complete" when PR merges
 
 ### 3. Observe the Automation
 - New issues automatically appear on the project board
 - Branch creation moves issues to "In Progress" status
+- **AI code reviews** provide instant feedback on PRs
 - Commit messages with `Closes #123` trigger status updates
 - Priority labels automatically update project fields
 - Testing workflows activate with label changes
@@ -245,8 +248,40 @@ The GitHub Actions workflow demonstrates quality gates:
 4. **Build** - Production build verification  
 5. **Security Scan** - Dependency vulnerability check
 6. **Integration** - End-to-end workflow validation
+7. **AI Code Review** - CodeRabbit intelligent analysis
 
 Branch protection rules require all checks to pass before merge.
+
+## 🤖 AI-Enhanced Code Reviews with CodeRabbit
+
+This project integrates CodeRabbit for intelligent, context-aware code reviews that complement the existing CI/CD pipeline.
+
+### Features
+- **Automated PR Reviews**: AI analysis of every pull request
+- **Security-Focused Scanning**: Enhanced security checks with Gitleaks integration
+- **TypeScript Expertise**: Specialized analysis for TypeScript/Node.js patterns
+- **Path-Based Intelligence**: Different review focus for src/, tests/, scripts/, workflows/
+- **Learning Capability**: Adapts to team preferences and codebase patterns
+
+### Configuration
+- **`.coderabbit.yaml`**: Tailored configuration for this project
+- **ESLint Integration**: Works with existing linting pipeline
+- **Security Tools**: Gitleaks enabled for secrets detection
+- **Smart Path Rules**: Specialized instructions for different code areas
+
+### How It Works
+1. **Create PR** → CodeRabbit automatically analyzes changes
+2. **AI Review** → Provides security, performance, and quality insights
+3. **Human Review** → Reviewers use AI insights to focus on critical areas
+4. **Merge** → All checks (CI + CodeRabbit + human review) must pass
+
+### Benefits
+- **Enhanced Security**: Additional layer beyond existing security scans
+- **Consistent Quality**: AI-powered review standards across all PRs
+- **Faster Feedback**: Immediate analysis while CI pipeline runs
+- **Team Learning**: CodeRabbit learns from team feedback and preferences
+
+See [CODERABBIT_SETUP.md](CODERABBIT_SETUP.md) for detailed setup and configuration information.
 
 ## 📋 Templates & Configuration Files
 
@@ -255,7 +290,9 @@ Branch protection rules require all checks to pass before merge.
 - `.github/pull_request_template.md` - PR template with Git Flow checklist
 - `.github/workflows/` - Automation workflows
 - `scripts/` - Setup and configuration scripts (including AI-assisted workflow)
+- `.coderabbit.yaml` - AI code review configuration
 - `CONTRIBUTING.md` - Complete Git Flow workflow guide
+- `CODERABBIT_SETUP.md` - CodeRabbit integration documentation
 
 ### Customization
 Each template can be customized by:
@@ -357,7 +394,7 @@ This project demonstrates Git Flow with branch protection:
 ### Protection Rules
 Both main and develop branches require:
 - Pull request reviews (minimum 1 approval)
-- All CI status checks passing
+- All CI status checks passing (including CodeRabbit analysis)
 - Conversation resolution
 - No direct pushes allowed
 
@@ -387,9 +424,10 @@ gh pr create --title "feat: implement new feature" --body "Closes #123"
 - [ ] New issues automatically appear on project board
 - [ ] Branch creation moves issues to "In Progress" status
 - [ ] Priority labels update project priority fields
+- [ ] CodeRabbit provides AI reviews on PRs
 - [ ] PR merge with "Closes #123" moves issue to "Dev Complete"
 - [ ] Branch protection prevents direct pushes to main/develop
-- [ ] CI pipeline runs on all PRs
+- [ ] CI pipeline runs on all PRs (including CodeRabbit checks)
 
 ### Common Workflow Test
 1. Create feature issue using template
@@ -397,8 +435,9 @@ gh pr create --title "feat: implement new feature" --body "Closes #123"
 3. Create feature branch following naming convention (`feature/issue-N-description`)
 4. Push branch and verify issue moves to "In Progress" status
 5. Make commits and create PR linking to issue
-6. Verify CI runs and status checks appear
-7. Merge PR and confirm issue moves to "Dev Complete"
+6. Verify CI runs, CodeRabbit reviews, and status checks appear
+7. Address any CodeRabbit suggestions and get human review
+8. Merge PR and confirm issue moves to "Dev Complete"
 
 ## 📅 Optimized Meeting Cadence
 

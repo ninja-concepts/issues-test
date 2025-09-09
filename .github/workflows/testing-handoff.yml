@@ -20,6 +20,31 @@ jobs:
           private-key: ${{ secrets.PROJECT_APP_KEY }}
           owner: ninja-concepts
 
+      - name: Resolve Project Node ID
+        id: resolve_project
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+        run: |
+          if [ -n "${{ vars.PROJECT_OWNER }}" ] && [ -n "${{ vars.PROJECT_NUMBER }}" ]; then
+            NODE_ID=$(gh api graphql -f query='
+              query($owner: String!, $number: Int!) {
+                organization(login: $owner) { projectV2(number: $number) { id } }
+              }' -f owner='${{ vars.PROJECT_OWNER }}' -F number='${{ vars.PROJECT_NUMBER }}' --jq '.data.organization.projectV2.id' 2>/dev/null)
+            if [ -z "$NODE_ID" ]; then
+              NODE_ID=$(gh api graphql -f query='
+                query($owner: String!, $number: Int!) {
+                  user(login: $owner) { projectV2(number: $number) { id } }
+                }' -f owner='${{ vars.PROJECT_OWNER }}' -F number='${{ vars.PROJECT_NUMBER }}' --jq '.data.user.projectV2.id' 2>/dev/null)
+            fi
+            if [ -z "$NODE_ID" ]; then
+              echo "Failed to resolve project node id from owner/number" >&2
+              exit 1
+            fi
+            echo "PROJECT_NODE_ID=$NODE_ID" >> $GITHUB_OUTPUT
+          else
+            echo "PROJECT_NODE_ID=${{ vars.PROJECT_ID }}" >> $GITHUB_OUTPUT
+          fi
+
       - name: Move to Testing when assigned to QA
         if: github.event_name == 'issues' && github.event.action == 'labeled' && github.event.label.name == 'testing'
         env:
@@ -44,7 +69,7 @@ jobs:
                   }
                 }
               }
-            }' -f project="${{ vars.PROJECT_ID }}" \
+            }' -f project="${{ steps.resolve_project.outputs.PROJECT_NODE_ID }}" \
             --jq ".data.node.items.nodes[] | select(.content.number == ${{ github.event.issue.number }}) | .id")
           
           if [ ! -z "$ITEM_ID" ]; then
@@ -59,7 +84,7 @@ jobs:
                 }) { 
                   projectV2Item { id } 
                 }
-              }' -f project="${{ vars.PROJECT_ID }}" \
+              }' -f project="${{ steps.resolve_project.outputs.PROJECT_NODE_ID }}" \
                  -f item="$ITEM_ID" \
                  -f field="${{ vars.STATUS_FIELD_ID }}" \
                  -f value="${{ vars.TESTING_OPTION_ID }}"
@@ -94,7 +119,7 @@ jobs:
                     }
                   }
                 }
-              }' -f project="${{ vars.PROJECT_ID }}" \
+              }' -f project="${{ steps.resolve_project.outputs.PROJECT_NODE_ID }}" \
               --jq ".data.node.items.nodes[] | select(.content.number == $ISSUE_NUMBER) | .id")
             
             if [ ! -z "$ITEM_ID" ]; then
@@ -109,7 +134,7 @@ jobs:
                   }) { 
                     projectV2Item { id } 
                   }
-                }' -f project="${{ vars.PROJECT_ID }}" \
+                }' -f project="${{ steps.resolve_project.outputs.PROJECT_NODE_ID }}" \
                    -f item="$ITEM_ID" \
                    -f field="${{ vars.STATUS_FIELD_ID }}" \
                    -f value="${{ vars.DONE_OPTION_ID }}"
@@ -141,7 +166,7 @@ jobs:
                     }
                   }
                 }
-              }' -f project="${{ vars.PROJECT_ID }}" \
+              }' -f project="${{ steps.resolve_project.outputs.PROJECT_NODE_ID }}" \
               --jq ".data.node.items.nodes[] | select(.content.number == $ISSUE_NUMBER) | .id")
             
             if [ ! -z "$ITEM_ID" ]; then
@@ -156,7 +181,7 @@ jobs:
                   }) { 
                     projectV2Item { id } 
                   }
-                }' -f project="${{ vars.PROJECT_ID }}" \
+                }' -f project="${{ steps.resolve_project.outputs.PROJECT_NODE_ID }}" \
                    -f item="$ITEM_ID" \
                    -f field="${{ vars.STATUS_FIELD_ID }}" \
                    -f value="${{ vars.IN_PROGRESS_OPTION_ID }}"

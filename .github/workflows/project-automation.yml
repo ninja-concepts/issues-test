@@ -29,6 +29,35 @@ jobs:
           private-key: ${{ secrets.PROJECT_APP_KEY }}
           owner: ninja-concepts
 
+      - name: Resolve Project Node ID
+        id: resolve_project
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+        run: |
+          # If PROJECT_OWNER and PROJECT_NUMBER are provided, resolve node id; else use PROJECT_ID
+          if [ -n "${{ vars.PROJECT_OWNER }}" ] && [ -n "${{ vars.PROJECT_NUMBER }}" ]; then
+            echo "Resolving project node id from owner/number: ${{ vars.PROJECT_OWNER }}#${{ vars.PROJECT_NUMBER }}"
+            NODE_ID=$(gh api graphql -f query='
+              query($owner: String!, $number: Int!) {
+                organization(login: $owner) { projectV2(number: $number) { id }
+              }
+            }' -f owner='${{ vars.PROJECT_OWNER }}' -F number='${{ vars.PROJECT_NUMBER }}' --jq '.data.organization.projectV2.id' 2>/dev/null)
+            if [ -z "$NODE_ID" ]; then
+              NODE_ID=$(gh api graphql -f query='
+                query($owner: String!, $number: Int!) {
+                  user(login: $owner) { projectV2(number: $number) { id } }
+                }' -f owner='${{ vars.PROJECT_OWNER }}' -F number='${{ vars.PROJECT_NUMBER }}' --jq '.data.user.projectV2.id' 2>/dev/null)
+            fi
+            if [ -z "$NODE_ID" ]; then
+              echo "Failed to resolve project node id from owner/number" >&2
+              exit 1
+            fi
+            echo "PROJECT_NODE_ID=$NODE_ID" >> $GITHUB_OUTPUT
+          else
+            echo "Using PROJECT_ID variable as node id"
+            echo "PROJECT_NODE_ID=${{ vars.PROJECT_ID }}" >> $GITHUB_OUTPUT
+          fi
+
       - name: Auto-assign new issues to project
         if: github.event_name == 'issues' && github.event.action == 'opened'
         env:
@@ -56,7 +85,7 @@ jobs:
                   }
                 }
               }
-            }' -f project="${{ vars.PROJECT_ID }}" -f issue="${{ github.event.issue.node_id }}"
+            }' -f project="${{ steps.resolve_project.outputs.PROJECT_NODE_ID }}" -f issue="${{ github.event.issue.node_id }}"
 
       - name: Set initial status for new issues
         if: github.event_name == 'issues' && github.event.action == 'opened'
@@ -82,7 +111,7 @@ jobs:
                   }
                 }
               }
-            }' -f project="${{ vars.PROJECT_ID }}" \
+            }' -f project="${{ steps.resolve_project.outputs.PROJECT_NODE_ID }}" \
             --jq ".data.node.items.nodes[] | select(.content.number == ${{ github.event.issue.number }}) | .id")
           
           # Set status to "Backlog"
@@ -97,7 +126,7 @@ jobs:
                 }) { 
                   projectV2Item { id } 
                 }
-              }' -f project="${{ vars.PROJECT_ID }}" \
+              }' -f project="${{ steps.resolve_project.outputs.PROJECT_NODE_ID }}" \
                  -f item="$ITEM_ID" \
                  -f field="${{ vars.STATUS_FIELD_ID }}" \
                  -f value="${{ vars.BACKLOG_OPTION_ID }}"
@@ -142,7 +171,7 @@ jobs:
                     }
                   }
                 }
-              }' -f project="${{ vars.PROJECT_ID }}" \
+              }' -f project="${{ steps.resolve_project.outputs.PROJECT_NODE_ID }}" \
               --jq ".data.node.items.nodes[] | select(.content.number == $ISSUE_NUMBER) | .id")
             
             if [ ! -z "$ITEM_ID" ]; then
@@ -157,7 +186,7 @@ jobs:
                   }) { 
                     projectV2Item { id } 
                   }
-                }' -f project="${{ vars.PROJECT_ID }}" \
+                }' -f project="${{ steps.resolve_project.outputs.PROJECT_NODE_ID }}" \
                    -f item="$ITEM_ID" \
                    -f field="${{ vars.STATUS_FIELD_ID }}" \
                    -f value="${{ vars.DEV_COMPLETE_OPTION_ID }}"
@@ -267,7 +296,7 @@ jobs:
                     }
                   }
                 }
-              }' -f project="${{ vars.PROJECT_ID }}" \
+              }' -f project="${{ steps.resolve_project.outputs.PROJECT_NODE_ID }}" \
               --jq ".data.node.items.nodes[] | select(.content.number == ${{ github.event.issue.number }}) | .id")
             
             if [ ! -z "$ITEM_ID" ]; then
@@ -282,7 +311,7 @@ jobs:
                   }) { 
                     projectV2Item { id } 
                   }
-                }' -f project="${{ vars.PROJECT_ID }}" \
+                }' -f project="${{ steps.resolve_project.outputs.PROJECT_NODE_ID }}" \
                    -f item="$ITEM_ID" \
                    -f field="${{ vars.PRIORITY_FIELD_ID }}" \
                    -f value="$PRIORITY"
@@ -319,6 +348,9 @@ jobs:
               echo "Issue #$ISSUE_NUMBER not found, skipping"
               exit 0
             fi
+
+            # Get issue node id (needed to add to project if missing)
+            ISSUE_NODE_ID=$(gh api repos/${{ github.repository }}/issues/$ISSUE_NUMBER --jq '.node_id')
             
             # Get the project item ID for the issue
             ITEM_ID=$(gh api graphql -f query='
@@ -337,9 +369,21 @@ jobs:
                     }
                   }
                 }
-              }' -f project="${{ vars.PROJECT_ID }}" \
+              }' -f project="${{ steps.resolve_project.outputs.PROJECT_NODE_ID }}" \
               --jq ".data.node.items.nodes[] | select(.content.number == $ISSUE_NUMBER) | .id")
             
+            # If not found in the first page of items, try adding the issue to the project
+            if [ -z "$ITEM_ID" ]; then
+              echo "Project item for issue #$ISSUE_NUMBER not found in project; adding it now"
+              ITEM_ID=$(gh api graphql -f query='
+                mutation($project: ID!, $issue: ID!) {
+                  addProjectV2ItemById(input: {projectId: $project, contentId: $issue}) {
+                    item { id }
+                  }
+                }
+              ' -f project="${{ steps.resolve_project.outputs.PROJECT_NODE_ID }}" -f issue="$ISSUE_NODE_ID" --jq ".data.addProjectV2ItemById.item.id")
+            fi
+
             if [ ! -z "$ITEM_ID" ]; then
               # Update issue status to "In Progress"
               gh api graphql -f query='
@@ -352,7 +396,7 @@ jobs:
                   }) { 
                     projectV2Item { id } 
                   }
-                }' -f project="${{ vars.PROJECT_ID }}" \
+                }' -f project="${{ steps.resolve_project.outputs.PROJECT_NODE_ID }}" \
                    -f item="$ITEM_ID" \
                    -f field="${{ vars.STATUS_FIELD_ID }}" \
                    -f value="${{ vars.IN_PROGRESS_OPTION_ID }}"

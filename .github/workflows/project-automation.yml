@@ -187,7 +187,7 @@ jobs:
                 }')
                 
                 # Create email content using AI
-                cat > /tmp/qa_email_generator.js << 'JSEOF'
+                cat > /tmp/qa_email_generator.js << JSEOF
 const fs = require('fs');
 const https = require('https');
 

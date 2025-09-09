@@ -70,8 +70,8 @@ TOTAL_CHANGED=$(echo "$ALL_CHANGED_FILES" | grep -c . || echo "0")
 
 echo "Found $TOTAL_CHANGED total changed files"
 
-# Filter out lock files and other problematic files
-FILTERED_CHANGED=$(echo "$ALL_CHANGED_FILES" | grep -v -E "(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|Gemfile\.lock|composer\.lock|\.min\.js|\.min\.css|\.map)$")
+# Filter out lock files, node_modules, build artifacts and other problematic files
+FILTERED_CHANGED=$(echo "$ALL_CHANGED_FILES" | grep -v -E "(node_modules/|dist/|build/|package-lock\.json|yarn\.lock|pnpm-lock\.yaml|Gemfile\.lock|composer\.lock|\.min\.js|\.min\.css|\.map)$")
 
 # Further filter by gitignore if .gitignore exists
 if [ -f ".gitignore" ]; then
@@ -93,8 +93,8 @@ if [ $EXCLUDED_FILES_COUNT -gt 0 ]; then
     EXCLUDED_FILES=$(echo "$ALL_CHANGED_FILES" | grep -v -F "$FINAL_CHANGED_FILES" || echo "")
     if [ ! -z "$EXCLUDED_FILES" ]; then
         LOCK_FILES=$(echo "$EXCLUDED_FILES" | grep -E "(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|Gemfile\.lock|composer\.lock)" || echo "")
-        BUILD_FILES=$(echo "$EXCLUDED_FILES" | grep -E "(\.min\.js|\.min\.css|\.map)$" || echo "")
-        IGNORED_FILES=$(echo "$EXCLUDED_FILES" | grep -v -E "(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|Gemfile\.lock|composer\.lock|\.min\.js|\.min\.css|\.map)$" || echo "")
+        BUILD_FILES=$(echo "$EXCLUDED_FILES" | grep -E "(node_modules/|dist/|build/|\.min\.js|\.min\.css|\.map)" || echo "")
+        IGNORED_FILES=$(echo "$EXCLUDED_FILES" | grep -v -E "(node_modules/|dist/|build/|package-lock\.json|yarn\.lock|pnpm-lock\.yaml|Gemfile\.lock|composer\.lock|\.min\.js|\.min\.css|\.map)" || echo "")
         
         [ ! -z "$LOCK_FILES" ] && echo -e "${YELLOW}  🔒 Lock files: $(echo "$LOCK_FILES" | tr '\n' ' ')${NC}"
         [ ! -z "$BUILD_FILES" ] && echo -e "${YELLOW}  🔧 Build artifacts: $(echo "$BUILD_FILES" | tr '\n' ' ')${NC}"

@@ -20,8 +20,10 @@ A comprehensive demonstration of GitHub's native Issues and Projects workflow, e
 git clone <repository-url>
 cd issues-test
 
-# Install dependencies (for CI/CD demo only)
+# Install dependencies for demo application (optional)
+cd example
 npm install
+cd ..
 ```
 
 ### 2. Try the Workflow
@@ -224,7 +226,7 @@ export OPENAI_API_KEY="your-api-key-here"
 
 ## 🎭 Demo Application (For CI/CD Only)
 
-The included TypeScript/Express API serves solely to demonstrate CI/CD integration:
+The included TypeScript/Express API (located in the `example/` directory) serves solely to demonstrate CI/CD integration:
 
 ### Available Endpoints
 - `GET /` - Welcome message
@@ -233,6 +235,8 @@ The included TypeScript/Express API serves solely to demonstrate CI/CD integrati
 
 ### Development Commands
 ```bash
+cd example         # Navigate to demo application
+npm install        # Install dependencies
 npm run dev        # Start development server
 npm run test       # Run test suite
 npm run lint       # Check code style  
